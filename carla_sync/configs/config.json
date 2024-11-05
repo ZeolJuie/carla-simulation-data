@@ -1,0 +1,157 @@
+{
+    "camera":[
+                {
+                    "sensor_type": "sensor.camera.rgb",
+                    "direction": "CAM_FRONT",
+                    "transform": {
+                        "location": {
+                            "x": 1.0,
+                            "y": 0,
+                            "z": 1.52
+                        },
+                        "rotation": {
+                            "roll": 0,
+                            "pitch": 0,
+                            "yaw": 0
+                        }
+                    },
+                    "fov": 70.0,
+                    "image_size": {
+                        "x": 1600,
+                        "y": 900
+                    }
+                },
+                {
+                    "sensor_type": "sensor.camera.rgb",
+                    "direction": "CAM_FRONT_RIGHT",
+                    "transform": {
+                        "location": {
+                            "x": 1.0,
+                            "y": 0.5,
+                            "z": 1.52
+                        },
+                        "rotation": {
+                            "roll": 0,
+                            "pitch": 0,
+                            "yaw": 55
+                        }
+                    }, 
+                    "fov": 70.0,
+                    "image_size": {
+                        "x": 1600,
+                        "y": 900
+                    }
+                },
+                {
+                    "sensor_type": "sensor.camera.rgb",
+                    "direction": "CAM_FRONT_LEFT",
+                    "transform": {
+                        "location": {
+                            "x": 1.0,
+                            "y": -0.5,
+                            "z": 1.52
+                        },
+                        "rotation": {
+                            "roll": 0,
+                            "pitch": 0,
+                            "yaw": -55
+                        }
+                    },
+                    "fov": 70.0,
+                    "image_size": {
+                        "x": 1600,
+                        "y": 900
+                    }
+                },
+                {
+                    "sensor_type": "sensor.camera.rgb",
+                    "direction": "CAM_BACK",
+                    "transform": {
+                        "location": {
+                            "x": -1.4,
+                            "y": 0,
+                            "z": 1.52
+                        },
+                        "rotation": {
+                            "roll": 0,
+                            "pitch": 0,
+                            "yaw": 180
+                        }
+                    }, 
+                    "fov": 90.0,
+                    "image_size": {
+                        "x": 1600,
+                        "y": 900
+                    }
+                },
+                {
+                    "sensor_type": "sensor.camera.rgb",
+                    "direction": "CAM_BACK_RIGHT",
+                    "transform": {
+                        "location": {
+                            "x": -0.1,
+                            "y": 0.5,
+                            "z": 1.52
+                        },
+                        "rotation": {
+                            "roll": 0,
+                            "pitch": 0,
+                            "yaw": 110
+                        }
+                    }, 
+                    "fov": 70.0,
+                    "image_size": {
+                        "x": 1600,
+                        "y": 900
+                    }
+                },
+                {
+                    "sensor_type": "sensor.camera.rgb",
+                    "direction": "CAM_BACK_LEFT",
+                    "transform": {
+                        "location": {
+                            "x": -0.1,
+                            "y": -0.5,
+                            "z": 1.52
+                        },
+                        "rotation": {
+                            "roll": 0,
+                            "pitch": 0,
+                            "yaw": -110
+                        }
+                    },
+                    "fov": 70.0,
+                    "image_size": {
+                        "x": 1600,
+                        "y": 900
+                    }
+                }
+    ],
+    "lidar":[
+        {
+            "sensor_type": "sensor.lidar.ray_cast_semantic",
+            "transform": {
+                "location": {
+                    "x": -0.5,
+                    "y": 0.0,
+                    "z": 1.8
+                },
+                "rotation": {
+                    "roll": 0.0,
+                    "pitch": 0.0,
+                    "yaw": 0.0
+                }
+            }, 
+            "bp_attribute":  {
+                "upper_fov": 15.0,
+                "lower_fov": -25.0,
+                "channels": 128.0,
+                "range": 100.0, 
+                "points_per_second": 500000
+            }
+            
+        }
+
+    ]
+
+}
