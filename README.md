@@ -29,3 +29,7 @@ auto-driving-dataset-collection/
 │
 ├── requirements.txt               # 依赖包列表
 └── README.md                      # 项目说明文档
+
+
+```
+python ~/carla/PythonAPI/examples/generate_traffic.py --safe -n 200 -w 100 --asynch --port 2000
