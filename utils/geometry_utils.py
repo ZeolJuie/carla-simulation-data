@@ -1,6 +1,53 @@
 import numpy as np
 
 
+def point_is_occluded(point, depth_map):
+    """ Checks whether or not the four pixels directly around the given point has less depth than the given vertex depth
+        If True, this means that the point is occluded.
+    """
+    x, y, vertex_depth = map(int, point)
+
+    from itertools import product
+    neigbours = product((1, -1), repeat=2)
+
+    is_occluded = []
+    for dy, dx in neigbours:
+        # If the point is on the boundary
+        if x == (depth_map.shape[1] - 1) or y == (depth_map.shape[0] - 1):
+            is_occluded.append(True)
+        # If the depth map says the pixel is closer to the camera than the actual vertex
+        elif depth_map[y + dy, x + dx] < vertex_depth:
+            is_occluded.append(True)
+        else:
+            is_occluded.append(False)
+    # Only say point is occluded if all four neighbours are closer to camera than vertex
+    return all(is_occluded)
+
+
+def calculate_occlusion_stats(vertices_pos2d, depth_image, MAX_RENDER_DEPTH_IN_METERS):
+    """ 
+        筛选bbox八个顶点中实际可见的点 
+        vertices_pos2d: points_image
+    """
+    num_visible_vertices = 0
+    num_vertices_outside_camera = 0
+
+    image_h, image_w = depth_image.shape
+
+    for x_2d, y_2d, vertex_depth in vertices_pos2d:
+
+        # 点在可见范围中，并且没有超出图片范围
+        if MAX_RENDER_DEPTH_IN_METERS > vertex_depth > 0 and point_in_canvas((x_2d, y_2d), image_h, image_w):
+
+            is_occluded = point_is_occluded(
+                (x_2d, y_2d, vertex_depth), depth_image)
+            if not is_occluded:
+                num_visible_vertices += 1
+        else:
+            num_vertices_outside_camera += 1
+    return num_visible_vertices, num_vertices_outside_camera
+
+
 def build_projection_matrix(w, h, fov, is_behind_camera=False):
     """
         构建一个 相机内参矩阵(Intrinsic Matrix), 用于将3D空间中的点投影到2D图像平面上

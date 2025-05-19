@@ -2,10 +2,18 @@ import cv2
 import os
 import json
 import time
+import argparse
+
+# 设置命令行参数解析
+parser = argparse.ArgumentParser(description="Play the images of the specified sequence and display the bounding box")
+parser.add_argument("sequence", type=str, help="sequenceid")
+parser.add_argument("--save_frame", type=str, default=None, help="Frame ID to save after drawing bounding boxes")
+args = parser.parse_args()
 
 # 图片路径和标签路径
-image_folder = "./carla_data/sequences/04/image"
-label_path = "./carla_data/sequences/04/labels.json"
+sequence_id = args.sequence  # 从命令行参数获取序列号
+image_folder = f"./carla_data/sequences/{sequence_id}/image"
+label_path = f"./carla_data/sequences/{sequence_id}/labels.json"
 
 # 帧率（每秒播放的帧数）
 fps = 20
@@ -26,6 +34,9 @@ for image_file in image_files:
     # 获取帧ID（假设图片文件名是帧ID，例如 "000001.png"）
     frame_id = os.path.splitext(image_file)[0]
 
+    if args.save_frame is not None and frame_id != args.save_frame:
+        continue
+
     # 加载图片
     image_path = os.path.join(image_folder, image_file)
     frame = cv2.imread(image_path)
@@ -43,20 +54,29 @@ for image_file in image_files:
             # 提取边界框
             bbox = obj["bbox"]
             class_name = obj["class"]
+            occlusion = obj["occlusion"]
 
             # 绘制边界框
             x1, y1, x2, y2 = map(int, bbox)  # 将浮点数转换为整数
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 1)  # 绿色框
+            if(occlusion < 2):
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 1)  # 绿色框
 
-            # 在边界框上方显示类别名称
-            # cv2.putText(frame, class_name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                # 在边界框上方显示类别名称
+                cv2.putText(frame, class_name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    # 如果指定了保存帧，并且当前帧是目标帧，则保存图片
+    if args.save_frame is not None and frame_id == args.save_frame:
+        output_path = os.path.join('visualize', f"{frame_id}_with_bbox.png")
+        cv2.imwrite(output_path, frame)
+        print(f"save image with bounding box: {output_path}")
+        break
 
     # 显示图片
-    cv2.imshow("Frame", frame)
+    # cv2.imshow("Frame", frame)
 
     # 按帧率延迟
-    if cv2.waitKey(frame_delay) & 0xFF == ord("q"):  # 按 'q' 键退出
+    if cv2.waitKey(frame_delay) & 0xFF == ord("q"): 
         break
 
 # 释放资源

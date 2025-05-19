@@ -14,73 +14,21 @@ import open3d as o3d
 import cv2
 import carla
 
+import config
+from sensors.camera import CameraSensor
+from sensors.depth_camera import DepthCameraSensor
+from sensors.semantic_camera import SemanticCameraSensor
+from sensors.lidar import LidarSensor
+from sensors.radar import RadarSensor
+from sensors.imu import IMUSensor
+from sensors.gnss import GNSSSensor
 from utils.geometry_utils import *
 from utils.folder_utils import *
 
 
-main_folder = create_folders('./carla_data', '04')
+main_folder = create_folders(config.DATA_DIR, '04')
 
-
-# Sensor callback.
-# This is where you receive the sensor data and
-# process it as you liked and the important part is that,
-# at the end, it should include an element into the sensor queue.
-def sensor_callback(sensor_data, sensor_queue, sensor_name):
-    # Do stuff with the sensor_data data like save it to disk
-    # Then you just need to add to the queue
-    try:
-        if sensor_name == "camera":
-            # 处理 RGB 图像
-            save_rgb_image(sensor_data)
-        elif sensor_name == "lidar":
-            # 处理 LiDAR 点云
-            save_lidar_point_cloud(sensor_data)
-        elif sensor_name == "imu":
-            # 处理 IMU 数据
-            save_imu_data(sensor_data)
-        
-        # 将数据帧和传感器名称放入队列
-        sensor_queue.put((sensor_data.frame, sensor_name, sensor_data))
-    except Exception as e:
-        print(f"Error processing {sensor_name} data: {e}")
-
-
-def save_rgb_image(sensor_data):
-    """
-    保存 RGB 图像到磁盘。
-    """
-    file_path = os.path.join(f"{main_folder}/image", '%06d.png' % sensor_data.frame)
-    sensor_data.save_to_disk(file_path)
-    print(f"Saved RGB image to {file_path}")
-
-
-def save_lidar_point_cloud(sensor_data):
-    """
-    保存 LiDAR 点云到磁盘。
-    """
-    data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=np.dtype("f4")))
-    data = np.reshape(data, (int(data.shape[0] / 4), 4))
-    points = data[:, :-1]
-    # TODO: 这里为什么取负号？
-    points[:, 1] = -points[:, 1]
-
-    o3d_point_cloud = o3d.geometry.PointCloud()
-    o3d_point_cloud.points = o3d.utility.Vector3dVector(points)
-
-    file_path = os.path.join(f"{main_folder}/velodyne", '%06d.ply' % sensor_data.frame)
-    o3d.io.write_point_cloud(file_path, o3d_point_cloud)
-
-    print(f"Saved LiDAR point cloud to {file_path}")
-
-
-def save_imu_data(sensor_data):
-    """
-    保存 IMU 数据到磁盘。
-    """
-    print(f"Saved IMU data")
-
-
-def get_city_object_annotation(world, frame_id, filter, walker, w2l, w2c, K):
+def get_city_object_annotation(world, frame_id, object, walker, w2l, w2c, K):
     """
     获取某一帧下的actor的标注数据
     :world 
@@ -101,8 +49,14 @@ def get_city_object_annotation(world, frame_id, filter, walker, w2l, w2c, K):
     """
 
     # Retrieve all bounding boxes for traffic lights within the level
-    bounding_box_set = world.get_level_bbs(carla.CityObjectLabel.TrafficLight)
-    bounding_box_set.extend(world.get_level_bbs(carla.CityObjectLabel.Static))
+    label_mapping = {
+        "TrafficLight": carla.CityObjectLabel.TrafficLight,
+        "TrafficSigns": carla.CityObjectLabel.TrafficSigns,
+        "Poles": carla.CityObjectLabel.Poles,
+        "Static": carla.CityObjectLabel.Static,
+    }
+
+    bounding_box_set = world.get_level_bbs(label_mapping[object])
 
     for bb in bounding_box_set:
 
@@ -153,9 +107,9 @@ def get_city_object_annotation(world, frame_id, filter, walker, w2l, w2c, K):
             y_min = 10000
 
             if forward_vec.dot(ray) > 0:
-                p1 = get_image_point(bb.location, K, w2c)
-                verts = [v for v in bb.get_world_vertices(carla.Transform())]
                 
+                # verts in world coordinate
+                verts = [v for v in bb.get_world_vertices(carla.Transform())]
 
                 for vert in verts:
                     p = get_image_point(vert, K, w2c)
@@ -175,7 +129,7 @@ def get_city_object_annotation(world, frame_id, filter, walker, w2l, w2c, K):
             # 存储 Bounding Box 数据
             object_label = {
                 'object_id': -1,                                    # 物体ID
-                'class': 'Static',                                  # 物体类别
+                'class': object,                                    # 物体类别
                 'truncation': 0.0,                                  # 截断程度（0-1）
                 'occlusion': 0,                                     # 遮挡程度（0-3）
                 'bbox': [x_min, y_min, x_max, y_max],               # 2D Bounding Box [x1, y1, x2, y2]
@@ -210,13 +164,13 @@ def main():
         # traffic_manager = client.get_trafficmanager()
         # traffic_manager.set_synchronous_mode(True)
 
-
         # We create the sensor queue in which we keep track of the information
         # already received. This structure is thread safe and can be
         # accessed by all the sensors callback concurrently without problem.
         sensor_queue = Queue()
 
         blueprint_library = world.get_blueprint_library()
+
 
         # 随机选择一个行人蓝图
         walker_bp = random.choice(blueprint_library.filter('walker.pedestrian.*'))
@@ -226,67 +180,104 @@ def main():
 
         # 随机选择一个生成点
         # spawn_point = random.choice(world.get_map().get_spawn_points())
-        spawn_point = world.get_random_location_from_navigation()
+
+        spawn_points = [world.get_random_location_from_navigation() for _ in range(300)]
+
+        # sort x[-125, 120]   y[-80, 150]
+        spawn_points = sorted(spawn_points, key=lambda point: (-point.x, -point.y))
+
+        # set start point and end point
+
+        # 02
+        # start_point = carla.Location(x=118, y=-8.054474, z=0.158620)
+        # end_point = carla.Location(x=80.076370, y=37.853725, z=0.158620)
+
+        # 03
+        start_point = carla.Location(x=27.677645, y=58.019924, z=0.158620)
+        end_point = carla.Location(x=91.465294, y=81.790596, z=0.158620)
 
         # 生成行人
-        walker = world.spawn_actor(walker_bp, random.choice(spawn_points))
+        walker = world.spawn_actor(walker_bp, carla.Transform(start_point, carla.Rotation()))
+
+        # 生成npc
+        pedestrians_num = 150
+        # 获取所有可能的生成点
+        spawn_points = []
+        for i in range(pedestrians_num):
+            loc = world.get_random_location_from_navigation()
+            if loc is not None:
+                spawn_point = carla.Transform(loc, carla.Rotation())
+                spawn_points.append(spawn_point)
+        
+        # 生成300个行人
+        pedestrians = []
+        controllers = []
+    
+        for i in range(pedestrians_num):
+            try:
+                # 随机选择行人蓝图
+                blueprint = random.choice(blueprint_library.filter('walker.pedestrian.*'))
+                
+                # 生成行人
+                pedestrian = world.spawn_actor(blueprint, spawn_points[i])
+                pedestrians.append(pedestrian)
+                
+            except Exception as e:
+                print(f"Error spawning pedestrian {i}: {e}")
+        
 
         # create all the sensors and keep them in a list for convenience.
         sensor_list = []
 
-        camera_bp = blueprint_library.find('sensor.camera.rgb')
-        lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
-        imu_bp = blueprint_library.find('sensor.other.imu')
-
-        # 设置摄像头
-        camera_bp.set_attribute('image_size_x', '1600')
-        camera_bp.set_attribute('image_size_y', '1200')
-        camera_bp.set_attribute('fov', '120')
-        # camera_bp.set_attribute('sensor_tick', '0.1')  # 设置摄像头频率为 10 Hz
-        camera_transform = carla.Transform(carla.Location(x=0.0, z=1.5))  # 摄像头位置
-        camera = world.spawn_actor(camera_bp, camera_transform, attach_to=walker)
-
-        camera.listen(lambda data: sensor_callback(data, sensor_queue, "camera"))
+        # 创建并设置传感器
+        camera = CameraSensor(world, blueprint_library, walker, main_folder)
         sensor_list.append(camera)
-
-
-        # 设置激光雷达
-        lidar_bp.set_attribute("dropoff_general_rate", "0.0")
-        lidar_bp.set_attribute("dropoff_intensity_limit", "1.0")
-        lidar_bp.set_attribute("dropoff_zero_intensity", "0.0")
-
-        lidar_bp.set_attribute("upper_fov", str(15.0))
-        lidar_bp.set_attribute("lower_fov", str(-25.0))
-        lidar_bp.set_attribute("channels", str(64.0))
-        lidar_bp.set_attribute("range", str(100.0))
-        lidar_bp.set_attribute("rotation_frequency", str(20.0 / 1))
-        lidar_bp.set_attribute("points_per_second", str(1000000))
-
-        # 激光雷达位置
-        lidar_transform = carla.Transform(carla.Location(x=0.0, y=0.0, z=1.5))
-        lidar = world.spawn_actor(lidar_bp, lidar_transform, attach_to=walker)
-
-        lidar.listen(lambda data: sensor_callback(data, sensor_queue, "lidar"))
+        depth_camera = DepthCameraSensor(world, blueprint_library, walker, main_folder)
+        sensor_list.append(depth_camera)
+        semantic_camera = SemanticCameraSensor(world, blueprint_library, walker, main_folder)
+        sensor_list.append(semantic_camera)
+        lidar = LidarSensor(world, blueprint_library, walker, main_folder)
         sensor_list.append(lidar)
-
-        # imu同雷达绑定
-        imu_transform = lidar_transform
-        imu = world.spawn_actor(imu_bp, imu_transform, attach_to=walker)
-        
-        imu.listen(lambda data: sensor_callback(data, sensor_queue, "imu"))
+        radar = RadarSensor(world, blueprint_library, walker, main_folder)
+        sensor_list.append(radar)
+        imu = IMUSensor(world, blueprint_library, walker, main_folder)
         sensor_list.append(imu)
+        gnss = GNSSSensor(world, blueprint_library, walker, main_folder)   
+        sensor_list.append(gnss)
 
+        # 启动传感器
+        camera.start(sensor_queue, "camera")
+        depth_camera.start(sensor_queue, "depth")
+        semantic_camera.start(sensor_queue, "semantic")
+        lidar.start(sensor_queue, "lidar")
+        radar.start(sensor_queue, "radar")
+        imu.start(sensor_queue, "imu")
+        gnss.start(sensor_queue, "gnss")
+        
         # 创建行人 AI 控制器
         controller_bp = blueprint_library.find('controller.ai.walker')
         walker_controller = world.spawn_actor(controller_bp, carla.Transform(), walker)
 
+        for pedestrian in pedestrians:
+            # 为行人创建AI控制器
+            controller_bp = world.get_blueprint_library().find('controller.ai.walker')
+            controller = world.spawn_actor(controller_bp, carla.Transform(), pedestrian)
+            controllers.append(controller)
+       
         # important! wait for a tick to ensure client receives the last transform of the walkers we have just created
         world.tick()
 
         # 应用控制
         walker_controller.start()
-        walker_controller.go_to_location(world.get_random_location_from_navigation())
+        walker_controller.go_to_location(end_point)
         walker_controller.set_max_speed(1 + random.random())
+
+        for controller in controllers:
+            # 启动控制器，设置行人随机行走
+            controller.start()
+            controller.go_to_location(world.get_random_location_from_navigation())
+            controller.set_max_speed(1 + random.random())
+
         spec = world.get_spectator()
 
         # Remember the edge pairs
@@ -296,9 +287,9 @@ def main():
         world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
 
         # Get the attributes from the camera
-        image_w = camera_bp.get_attribute("image_size_x").as_int()
-        image_h = camera_bp.get_attribute("image_size_y").as_int()
-        fov = camera_bp.get_attribute("fov").as_float()
+        image_w = camera.get_attribute("image_size_x").as_int()
+        image_h = camera.get_attribute("image_size_y").as_int()
+        fov = camera.get_attribute("fov").as_float()
 
         K = build_projection_matrix(image_w, image_h, fov)
         K_b = build_projection_matrix(image_w, image_h, fov, is_behind_camera=True)
@@ -311,13 +302,25 @@ def main():
             # Tick the server
             world.tick()
             w_frame = world.get_snapshot().frame
-            print("\nWorld's frame: %d" % w_frame)
+
+            print("\n ----------- World's frame: %d -----------" % w_frame)
 
             # 获取行人位置
             walker_location = walker.get_location()
             print(f"walker location: ({walker_location.x:.2f}, {walker_location.y:.2f}, {walker_location.z:.2f})")
+
+
+            # 设置观察者的位置（行人后方 3 米，高度 2 米）
+            spectator_location = walker_location + walker.get_transform().get_forward_vector() * -3.0 + carla.Location(z=2.0)  # 稍微抬高视角
+
+            # 设置观察者的旋转（与行人同方向）
+            spectator_rotation = walker.get_transform().rotation
+            spectator_rotation.pitch = -20  # 稍微俯视（可选调整）
+
+            # 更新 Spectator
+            spec.set_transform(carla.Transform(spectator_location, spectator_rotation))
             
-            spec.set_transform(carla.Transform(walker.get_transform().location + carla.Location(z=10), carla.Rotation(pitch=-90)))
+            # spec.set_transform(carla.Transform(walker.get_transform().location + carla.Location(x=0.1, z=0.8), carla.Rotation()))
 
             # Now, we wait to the sensors data to be received.
             # As the queue is blocking, we will wait in the queue.get() methods
@@ -401,7 +404,6 @@ def main():
                         y_min = 10000
 
                         if forward_vec.dot(ray) > 0:
-                            p1 = get_image_point(bbox.location, K, world_2_camera)
                             
                             for vert in verts:
                                 p = get_image_point(vert, K, world_2_camera)
@@ -417,11 +419,13 @@ def main():
                                 # Find the lowest  vertex
                                 if p[1] < y_min:
                                     y_min = p[1]
+                        
+                        npc_class = "Pedestrian" if "walker" in npc.type_id else npc.attributes['base_type']
 
                         # 存储 Bounding Box 数据
                         object_label = {
                             'object_id': npc.id,                                # 物体ID
-                            'class': npc.type_id,                               # 物体类别
+                            'class': npc_class,                                 # 物体类别
                             'truncation': 0.0,                                  # 截断程度（0-1）
                             'occlusion': 0,                                     # 遮挡程度（0-3）
                             'bbox': [x_min, y_min, x_max, y_max],               # 2D Bounding Box [x1, y1, x2, y2]
@@ -435,16 +439,18 @@ def main():
                 
                 labels.append(frame_label)
 
-                city_object_labels = get_city_object_annotation(
-                    wolrd = world, 
-                    frame_id = w_frame, 
-                    filter = [carla.CityObjectLabel.TrafficLight, carla.CityObjectLabel.Static], 
-                    walker = walker, 
-                    w2l = world_2_lidar, 
-                    w2c = world_2_camera, 
-                    K = K
-                )
-                frame_label["objects"].extend(city_object_labels)
+                city_objects = ["TrafficLight", "TrafficSigns", "Poles", "Static"]
+                for object in city_objects:
+                    city_object_labels = get_city_object_annotation(
+                        world = world, 
+                        frame_id = w_frame, 
+                        object = object,
+                        walker = walker, 
+                        w2l = world_2_lidar, 
+                        w2c = world_2_camera, 
+                        K = K
+                    )
+                    frame_label["objects"].extend(city_object_labels)
 
             except Empty:
                 print("    Some of the sensor information is missed")
@@ -462,6 +468,11 @@ def main():
 
         # 销毁 actor
         walker.destroy()
+
+        for controller in controllers:
+            controller.stop()
+        client.apply_batch([carla.command.DestroyActor(x) for x in pedestrians])
+        client.apply_batch([carla.command.DestroyActor(x) for x in controllers])
 
         for sensor in sensor_list:
             sensor.destroy()

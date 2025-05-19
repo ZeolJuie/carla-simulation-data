@@ -9,13 +9,13 @@ import carla
 import config
 from sensors.sensor import Sensor
 
-class LidarSensor(Sensor):
+class SemanticLidarSensor(Sensor):
     def __init__(self, world, blueprint_library, walker, data_dir):
-        super().__init__(world, blueprint_library, walker, data_dir, 'lidar')
+        super().__init__(world, blueprint_library, walker, data_dir, 'semantic lidar')
 
     def _setup_sensor(self, blueprint_library, walker):
         # 设置激光雷达
-        lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
+        lidar_bp = blueprint_library.find('sensor.lidar.ray_cast_semantic')
 
         lidar_bp.set_attribute("dropoff_general_rate", "0.0")
         lidar_bp.set_attribute("dropoff_intensity_limit", "1.0")

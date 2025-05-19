@@ -3,7 +3,7 @@ import numpy as np
 import os
 import json
 import time
-
+import argparse
 
 def compute_rotation_matrix(rotation):
     """
@@ -16,8 +16,6 @@ def compute_rotation_matrix(rotation):
         np.ndarray: A 3x3 rotation matrix.
     """
     roll, pitch, yaw = rotation
-
-    # yaw = - yaw
 
     r_x = np.array([
         [1, 0, 0],
@@ -50,7 +48,6 @@ def create_3d_box(center, size, rotation):
     :param rotation_matrix: 3x3 旋转矩阵
     :return: open3d.geometry.LineSet 对象
     """
-
     rotation_matrix = compute_rotation_matrix(rotation)
 
     center = [center[0], center[1], center[2]]
@@ -93,13 +90,17 @@ def create_3d_box(center, size, rotation):
     return line_set
 
 
-# 点云路径和标签路径
-lidar_folder = "./carla_data/sequences/04/velodyne"
-label_path = "./carla_data/sequences/04/labels.json"
+# 设置命令行参数解析
+parser = argparse.ArgumentParser(description="Visualize point cloud with 3D bounding boxes")
+parser.add_argument("sequence", type=str, help="sequenceid")
+parser.add_argument("--frame_id", type=str, default=None, help="Frame ID to display (e.g., '000001')")
+parser.add_argument("--save_image", type=str, default=None, help="Path to save the image (e.g., 'frame_000001.png')")
+args = parser.parse_args()
 
-# 帧率（每秒播放的帧数）
-fps = 20
-frame_delay = 1.0 / fps  # 每帧的延迟时间（秒）
+# 点云路径和标签路径
+sequence_id = args.sequence  # 从命令行参数获取序列号
+lidar_folder = f"./carla_data/sequences/{sequence_id}/velodyne"
+label_path = f"./carla_data/sequences/{sequence_id}/labels.json"
 
 # 加载标签数据
 with open(label_path, "r") as f:
@@ -117,10 +118,12 @@ vis.create_window()
 
 vis.get_render_option().point_size = 1
 
-# 遍历点云文件并按帧率播放
-for ply_file in ply_files:
-    # 获取帧ID（假设点云文件名是帧ID，例如 "000001.ply"）
-    frame_id = os.path.splitext(ply_file)[0]
+# 如果指定了 frame_id，则只显示该帧
+if args.frame_id:
+    ply_file = f"{args.frame_id}.ply"
+    if ply_file not in ply_files:
+        print(f"Frame {args.frame_id} not found.")
+        exit()
 
     # 加载点云
     ply_path = os.path.join(lidar_folder, ply_file)
@@ -128,8 +131,8 @@ for ply_file in ply_files:
 
     # 如果点云加载失败，跳过
     if not point_cloud.has_points():
-        print(f"无法加载点云: {ply_path}")
-        continue
+        print(f"load point cloud failed: {ply_path}")
+        exit()
 
     # 清空可视化窗口
     vis.clear_geometries()
@@ -138,10 +141,8 @@ for ply_file in ply_files:
     vis.add_geometry(point_cloud)
 
     # 获取当前帧的标签数据
-    if frame_id in label_dict:
-
-        objects = label_dict[frame_id]
-
+    if args.frame_id in label_dict:
+        objects = label_dict[args.frame_id]
         for obj in objects:
             # 提取 3D 边界框数据
             dimensions = obj["dimensions"]  # [height, width, length]
@@ -156,8 +157,57 @@ for ply_file in ply_files:
     vis.poll_events()
     vis.update_renderer()
 
-    # 按帧率延迟
-    time.sleep(frame_delay)
+    # 如果指定了保存图片的路径，则保存当前帧为图片
+    if args.save_image:
+        vis.capture_screen_image(args.save_image)
+        print(f"Saved image to {args.save_image}")
+
+    # 保持窗口打开，直到用户关闭
+    while True:
+        vis.poll_events()
+        vis.update_renderer()
+        time.sleep(0.1)
+
+else:
+    # 如果没有指定 frame_id，则按帧率播放所有帧
+    for ply_file in ply_files:
+        # 获取帧ID（假设点云文件名是帧ID，例如 "000001.ply"）
+        frame_id = os.path.splitext(ply_file)[0]
+
+        # 加载点云
+        ply_path = os.path.join(lidar_folder, ply_file)
+        point_cloud = o3d.io.read_point_cloud(ply_path)
+
+        # 如果点云加载失败，跳过
+        if not point_cloud.has_points():
+            print(f"load point cloud failed: {ply_path}")
+            continue
+
+        # 清空可视化窗口
+        vis.clear_geometries()
+
+        # 添加点云到可视化窗口
+        vis.add_geometry(point_cloud)
+
+        # 获取当前帧的标签数据
+        if frame_id in label_dict:
+            objects = label_dict[frame_id]
+            for obj in objects:
+                # 提取 3D 边界框数据
+                dimensions = obj["dimensions"]  # [height, width, length]
+                location = obj["location"]  # [x, y, z]
+                rotation = obj["rotation"]  # 欧拉角
+
+                # 创建 3D 边界框
+                bbox = create_3d_box(location, dimensions, rotation)
+                vis.add_geometry(bbox)
+
+        # 更新可视化窗口
+        vis.poll_events()
+        vis.update_renderer()
+
+        # 按帧率延迟
+        time.sleep(1.0 / 20)
 
 # 关闭可视化窗口
 vis.destroy_window()
