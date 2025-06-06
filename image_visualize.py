@@ -59,7 +59,7 @@ for image_file in image_files:
             # 绘制边界框
             x1, y1, x2, y2 = map(int, bbox)  # 将浮点数转换为整数
 
-            if(occlusion < 2):
+            if occlusion < 3:
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 1)  # 绿色框
 
                 # 在边界框上方显示类别名称
@@ -73,7 +73,7 @@ for image_file in image_files:
         break
 
     # 显示图片
-    # cv2.imshow("Frame", frame)
+    cv2.imshow("Frame", frame)
 
     # 按帧率延迟
     if cv2.waitKey(frame_delay) & 0xFF == ord("q"): 

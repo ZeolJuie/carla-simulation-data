@@ -6,6 +6,8 @@ client.set_timeout(10.0)
 world = client.get_world()
 m = world.get_map()
 
+world = client.load_world("Town01")
+
 # Get the blueprint library
 blueprint_library = world.get_blueprint_library()
 
@@ -23,7 +25,7 @@ for i, spawn_point in enumerate(spawn_points):
 # Initialize spectator
 spectator = world.get_spectator()
 
-spectator.set_transform(carla.Transform(carla.Location(z=250, x=0), carla.Rotation(yaw=0, pitch=-90)))
+spectator.set_transform(carla.Transform(carla.Location(z=300, x=50, y= 50), carla.Rotation(yaw=0, pitch=-90)))
 
 # Main loop
 while True:

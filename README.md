@@ -5,6 +5,8 @@
 生成交通要素
 python ~/carla/PythonAPI/examples/generate_traffic.py --safe -n 50 -w 0 --asynch --port 2000
 
+python scenario/generate_traffic.py -n 50 -w 0 --asynch --port 2000 --filterv car 20 --filterv bicycle 30
+
 启动采集
 python start_sampling.py
 

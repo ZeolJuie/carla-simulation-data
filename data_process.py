@@ -101,7 +101,7 @@ def get_image_point(loc, K):
     # loc还是lidar坐标系下的
 
     point = np.column_stack([
-        loc[:, 1],  # 新第1列 = 原第2列取负
+        loc[:, 1],   # 新第1列 = 原第2列取负
         -loc[:, 2],  # 新第2列 = 原第1列
         loc[:, 0]    # 新第3列 = 原第3列
     ])
@@ -144,7 +144,7 @@ def process_single_frame(depth_path, labels, K):
             obj["occlusion"] = 0
         elif num_visible_vertices >= 4:
             obj["occlusion"] = 1
-        elif num_visible_vertices >= 3:
+        elif num_visible_vertices >= 2:
             obj["occlusion"] = 2
         else:
             obj["occlusion"] = 3
@@ -196,9 +196,9 @@ def process_all_frame_labels():
     
 # 运行处理
 if __name__ == "__main__":
-    sequence_dir = "carla_data/sequences/03"
-    # process_all_frame_occlusion(sequence_dir)
+    sequence_dir = "carla_data/sequences/04"
+    process_all_frame_occlusion(sequence_dir)
 
-    process_all_frame_labels()
+    # process_all_frame_labels()
 
 

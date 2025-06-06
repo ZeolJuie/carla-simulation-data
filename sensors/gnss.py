@@ -61,9 +61,10 @@ class GNSSSensor(Sensor):
             # 行人旋转（Rotation）
             rotation.pitch, rotation.roll, rotation.yaw
         ])
-        print(f"Saved: GNSS=({sensor_data.latitude}, {sensor_data.longitude}, {sensor_data.altitude}), "
-            f"Location=({location.x}, {location.y}, {location.z}), "
-            f"Rotation=({rotation.pitch}, {rotation.roll}, {rotation.yaw})")
+        # print(f"Saved: GNSS=({sensor_data.latitude}, {sensor_data.longitude}, {sensor_data.altitude}), "
+        #     f"Location=({location.x}, {location.y}, {location.z}), "
+        #     f"Rotation=({rotation.pitch}, {rotation.roll}, {rotation.yaw})")
+        print(f"Saved GNSS data,  {sensor_data.frame}")
         
     def destroy(self):
         super().destroy()

@@ -24,6 +24,7 @@ from sensors.imu import IMUSensor
 from sensors.gnss import GNSSSensor
 from utils.geometry_utils import *
 from utils.folder_utils import *
+from scenario.scenario_config import generate_scenario
 
 
 main_folder = create_folders(config.DATA_DIR, '04')
@@ -147,8 +148,11 @@ def main():
 
     # We start creating the client
     client = carla.Client('localhost', 2000)
-    client.set_timeout(2.0)
-    world = client.get_world()
+    client.set_timeout(10.0)
+
+    scenario = generate_scenario('04')
+    
+    world = client.load_world(scenario.map_name)
     
     try:
         # We need to save the settings to be able to recover them at the end
@@ -167,10 +171,8 @@ def main():
         # We create the sensor queue in which we keep track of the information
         # already received. This structure is thread safe and can be
         # accessed by all the sensors callback concurrently without problem.
-        sensor_queue = Queue()
 
         blueprint_library = world.get_blueprint_library()
-
 
         # 随机选择一个行人蓝图
         walker_bp = random.choice(blueprint_library.filter('walker.pedestrian.*'))
@@ -193,13 +195,18 @@ def main():
         # end_point = carla.Location(x=80.076370, y=37.853725, z=0.158620)
 
         # 03
-        start_point = carla.Location(x=27.677645, y=58.019924, z=0.158620)
-        end_point = carla.Location(x=91.465294, y=81.790596, z=0.158620)
+        # start_point = carla.Location(x=27.677645, y=58.019924, z=0.158620)
+        # end_point = carla.Location(x=91.465294, y=81.790596, z=0.158620)
+
+        # 04
+        start_point = scenario.start_point
+        end_point = scenario.end_points
 
         # 生成行人
         walker = world.spawn_actor(walker_bp, carla.Transform(start_point, carla.Rotation()))
 
         # 生成npc
+        # TODO: pedestrians_num设置为场景属性
         pedestrians_num = 150
         # 获取所有可能的生成点
         spawn_points = []
@@ -245,14 +252,11 @@ def main():
         gnss = GNSSSensor(world, blueprint_library, walker, main_folder)   
         sensor_list.append(gnss)
 
+        sensor_queues = {sensor.sensor_type: Queue() for sensor in sensor_list}
+
         # 启动传感器
-        camera.start(sensor_queue, "camera")
-        depth_camera.start(sensor_queue, "depth")
-        semantic_camera.start(sensor_queue, "semantic")
-        lidar.start(sensor_queue, "lidar")
-        radar.start(sensor_queue, "radar")
-        imu.start(sensor_queue, "imu")
-        gnss.start(sensor_queue, "gnss")
+        for sensor in sensor_list:
+            sensor.start(sensor_queues[sensor.sensor_type], sensor.sensor_type)
         
         # 创建行人 AI 控制器
         controller_bp = blueprint_library.find('controller.ai.walker')
@@ -305,6 +309,11 @@ def main():
 
             print("\n ----------- World's frame: %d -----------" % w_frame)
 
+            for sensor in sensor_list:
+                s_frame = sensor_queues[sensor.sensor_type].get(True, 1.0)
+                # 在1000时 有取出当前帧的
+                print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))
+
             # 获取行人位置
             walker_location = walker.get_location()
             print(f"walker location: ({walker_location.x:.2f}, {walker_location.y:.2f}, {walker_location.z:.2f})")
@@ -336,10 +345,6 @@ def main():
                     "objects": []
                 }
                 
-                for _ in range(len(sensor_list)):
-                    s_frame = sensor_queue.get(True, 1.0)
-                    print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))
-
                 # Get the camera matrix 
                 world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
 
@@ -474,8 +479,8 @@ def main():
         client.apply_batch([carla.command.DestroyActor(x) for x in pedestrians])
         client.apply_batch([carla.command.DestroyActor(x) for x in controllers])
 
-        for sensor in sensor_list:
-            sensor.destroy()
+        # destroy sensor actor in a single simulation step
+        client.apply_batch([carla.command.DestroyActor(x.sensor) for x in sensor_list])
 
 
 if __name__ == "__main__":

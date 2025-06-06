@@ -59,11 +59,11 @@ class IMUSensor(Sensor):
             # 罗盘方向（弧度）
             sensor_data.compass
         ])
-        print(f"IMU Data: Accel=({sensor_data.accelerometer.x:.3f}, {sensor_data.accelerometer.y:.3f}, {sensor_data.accelerometer.z:.3f}), "
-            f"Gyro=({sensor_data.gyroscope.x:.3f}, {sensor_data.gyroscope.y:.3f}, {sensor_data.gyroscope.z:.3f}), "
-            f"Compass={sensor_data.compass:.3f}")
+        # print(f"IMU Data: Accel=({sensor_data.accelerometer.x:.3f}, {sensor_data.accelerometer.y:.3f}, {sensor_data.accelerometer.z:.3f}), "
+        #     f"Gyro=({sensor_data.gyroscope.x:.3f}, {sensor_data.gyroscope.y:.3f}, {sensor_data.gyroscope.z:.3f}), "
+        #     f"Compass={sensor_data.compass:.3f}")
 
-        print(f"Saved IMU data")
+        print(f"Saved IMU data, frame: {sensor_data.frame}")
 
     def destroy(self):
         super().destroy()
