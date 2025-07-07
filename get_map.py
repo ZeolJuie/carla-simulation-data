@@ -3,10 +3,18 @@ import carla
 # Connect to the Carla server
 client = carla.Client('localhost', 2000)
 client.set_timeout(10.0)
+
 world = client.get_world()
+
 m = world.get_map()
 
-world = client.load_world("Town01")
+map_name = (m.name).split("/")[-1]
+xodr_data = world.get_map().to_opendrive()
+
+
+# 保存为.xodr文件
+# with open(f'./carla_data/maps/{map_name}.xodr', 'w') as f:
+#     f.write(xodr_data)
 
 # Get the blueprint library
 blueprint_library = world.get_blueprint_library()

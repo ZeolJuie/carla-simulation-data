@@ -1,4 +1,6 @@
-# 计算2D Bounding Boxes的遮挡程度
+import sys
+sys.path.append('.')
+
 import json
 import os
 
@@ -193,12 +195,79 @@ def process_all_frame_labels():
     # 保存更新后的标签
     with open(label_path, "w") as f:
         json.dump(labels, f, indent=4)
+
+def process_occlusion_by_lidar():
+    """
+        使用（语义）激光雷达判定遮挡情况
+    """
+    # 1. 读取语义激光雷达数据和label.json
+
+    # 2. 根据雷达第五维instance id, 确定动态障碍物（Car， Pedestrian）的点云覆盖情况
+
+
+
+
+def generate_static_object_id(sequence_dir):
+    """
+        CityObjectLabel获取的静态物体没有ID属性, 由于物体的全局translation固定, 根据全局坐标区分instance并分配sequence内唯一的Object ID
+    """
+
+    # 1. 读取label.json
+    label_path = os.path.join(sequence_dir, "labels.json")
+    with open(label_path, "r") as f:
+        labels = json.load(f)
+
+    # 2. 建立map： key-Tuple(x, y, z), value-object ID
+    object_map = dict()
+
+    # 创建待分配的new id，在该序列中唯一，从10000开始分配 CityObject id
+    new_id = 10000
+
+    # 3. 遍历frame，当前帧下，统计已分配的ID
+    for frame in labels:
+        exist_ids = [obj['object_id'] for obj in frame['objects']]
+        
+        # 4. 遍历当前帧下所有ID = -1 （采集时标记的CityObject）的Object
+        for obj in frame['objects']:
+            if obj['object_id'] != -1:
+                continue
+
+            object_location = tuple(obj['location'])
+
+            # 如果其translation已经在key中，修改ID
+            if object_location in object_map.keys():
+                obj['object_id'] = object_map[object_location]
+
+            # 如果还没有在key中（新进入场景采集范围的object），则创建分配ID，并记录map
+            else:
+                # 确保new id未被分配
+                while new_id in exist_ids:
+                    new_id += 1
+                obj['object_id'] = new_id
+                exist_ids.append(new_id)
+                object_map[object_location] = obj['object_id']
+
+    # 保存更新后的标签
+    with open(label_path, "w") as f:
+        json.dump(labels, f, indent=4)
+        print("Generate static bbject ID end, new label file is saved.")
     
 # 运行处理
 if __name__ == "__main__":
-    sequence_dir = "carla_data/sequences/04"
-    process_all_frame_occlusion(sequence_dir)
+    sequence_dir = "carla_data/sequences/01"
+    
+    # 统计动态障碍物的点云覆盖数量
 
-    # process_all_frame_labels()
+    # 使用深度相机信息，计算相机视角下的遮挡
+    # process_occlusion_by_lidar()
+    # process_all_frame_occlusion(sequence_dir)
+
+    # 去除Poles灯泡
+
+    # CityO物体分配instance id
+    generate_static_object_id(sequence_dir)
+
+
+    
 
 

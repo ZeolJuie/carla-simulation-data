@@ -26,18 +26,19 @@ class GNSSSensor(Sensor):
         gnss = self.world.spawn_actor(gnss_bp, gnss_transform, attach_to=walker)
 
         # 创建 CSV 文件并写入表头
-        file_path = f"{self.data_dir}/gnss_data.csv"
-        self.csv_file = open(file_path, "w", newline="")
-        self.csv_writer = csv.writer(self.csv_file)
-        self.csv_writer.writerow([
-            "frame", "timestamp",
-            # GNSS 数据
-            "gnss_latitude", "gnss_longitude", "gnss_altitude",
-            # 车辆位置（Location）
-            "location_x", "location_y", "location_z",
-            # 车辆旋转（Rotation）
-            "rotation_pitch", "rotation_roll", "rotation_yaw"
-        ])
+        self.file_path = f"{self.data_dir}/gnss.csv"
+
+        with open(self.file_path , 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "frame", "timestamp",
+                # GNSS 数据
+                "gnss_latitude", "gnss_longitude", "gnss_altitude",
+                # 车辆位置（Location）
+                "location_x", "location_y", "location_z",
+                # 车辆旋转（Rotation）
+                "rotation_pitch", "rotation_roll", "rotation_yaw"
+            ])
 
         return gnss_bp, gnss
     
@@ -51,16 +52,19 @@ class GNSSSensor(Sensor):
         rotation = transform.rotation
 
         # 写入 CSV
-        self.csv_writer.writerow([
-            # 时间戳
-            sensor_data.frame, sensor_data.timestamp,
-            # 经纬度 高度
-            sensor_data.latitude, sensor_data.longitude, sensor_data.altitude,
-            # 行人位置（Location）
-            location.x, location.y, location.z,
-            # 行人旋转（Rotation）
-            rotation.pitch, rotation.roll, rotation.yaw
-        ])
+        with open(self.file_path , 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                # 时间戳
+                '%06d' % sensor_data.frame, '%.12f' % sensor_data.timestamp,
+                # 经纬度 高度
+                sensor_data.latitude, sensor_data.longitude, sensor_data.altitude,
+                # 行人位置（Location）
+                location.x, location.y, location.z,
+                # 行人旋转（Rotation）
+                rotation.pitch, rotation.roll, rotation.yaw
+            ])
+        
         # print(f"Saved: GNSS=({sensor_data.latitude}, {sensor_data.longitude}, {sensor_data.altitude}), "
         #     f"Location=({location.x}, {location.y}, {location.z}), "
         #     f"Rotation=({rotation.pitch}, {rotation.roll}, {rotation.yaw})")

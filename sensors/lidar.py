@@ -28,7 +28,7 @@ class LidarSensor(Sensor):
         lidar_bp.set_attribute("rotation_frequency", str(config.LIDAR_ROTATION_FREQUENCY))
         lidar_bp.set_attribute("points_per_second", str(config.LIDAR_POINTS_PER_SECOND))
 
-        lidar_transform = carla.Transform(carla.Location(x=config.SENSOR_TRANSFORM_X, z=config.SENSOR_TRANSFORM_Z))
+        lidar_transform = carla.Transform(carla.Location(x=config.LIDAR_TRANSFORM_X, z=config.LIDAR_TRANSFORM_Z))
         lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=walker)
         return lidar_bp, lidar
     
@@ -38,14 +38,14 @@ class LidarSensor(Sensor):
         """
         data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=np.dtype("f4")))
         data = np.reshape(data, (int(data.shape[0] / 4), 4))
-        points = data[:, :-1]
         
-        points[:, 1] = -points[:, 1]
+        data[:, 1] = -data[:, 1]
 
-        o3d_point_cloud = o3d.geometry.PointCloud()
-        o3d_point_cloud.points = o3d.utility.Vector3dVector(points)
+        # 添加第五维ring index（全部设为0）
+        # ring_index = np.zeros((data.shape[0], 1))
+        # data = np.hstack((data, ring_index))
 
-        file_path = os.path.join(f"{self.data_dir}/velodyne", '%06d.ply' % sensor_data.frame)
-        o3d.io.write_point_cloud(file_path, o3d_point_cloud)
+        file_path = os.path.join(f"{self.data_dir}/velodyne", '%06d.bin' % sensor_data.frame)
+        data.astype(np.float32).tofile(file_path)
 
         print(f"Saved LiDAR point cloud to {file_path}")

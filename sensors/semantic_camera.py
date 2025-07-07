@@ -27,7 +27,8 @@ class SemanticCameraSensor(Sensor):
     def _save_data(self, sensor_data):
 
         # 保存 语义分割相机数据 到磁盘。
-        file_path = os.path.join(f"{self.data_dir}/semantic", '%06d.png' % sensor_data.frame)
+
+        file_path = os.path.join(f"{self.data_dir}/semantic/", '%06d.jpg' % sensor_data.frame)
         sensor_data.convert(carla.ColorConverter.CityScapesPalette)
 
         sensor_data.save_to_disk(file_path)

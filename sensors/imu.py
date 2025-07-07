@@ -30,18 +30,19 @@ class IMUSensor(Sensor):
         imu = self.world.spawn_actor(imu_bp, imu_transform, attach_to=walker)
 
         # 创建 CSV 文件并写入表头
-        file_path = f"{self.data_dir}/imu_data.csv"
-        self.csv_file = open(file_path, "w", newline="")
-        self.csv_writer = csv.writer(self.csv_file)
-        self.csv_writer.writerow([
-            "frame",
-            # 加速度（m/s²）
-            "accel_x", "accel_y", "accel_z",
-            # 角速度（rad/s）
-            "gyro_x", "gyro_y", "gyro_z",
-            # 方向（弧度）
-            "compass"
-        ])
+        self.file_path = f"{self.data_dir}/imu.csv"
+
+        with open(self.file_path , 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "frame",
+                # 加速度（m/s²）
+                "accel_x", "accel_y", "accel_z",
+                # 角速度（rad/s）
+                "gyro_x", "gyro_y", "gyro_z",
+                # 方向（弧度）
+                "compass"
+            ])
 
         return imu_bp, imu
     
@@ -49,16 +50,18 @@ class IMUSensor(Sensor):
         """
         保存 IMU 数据到磁盘。
         """
+        with open(self.file_path , 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                '%06d' % sensor_data.frame,
+                # 加速度（m/s²）
+                sensor_data.accelerometer.x, sensor_data.accelerometer.y, sensor_data.accelerometer.z,
+                # 角速度（rad/s）
+                sensor_data.gyroscope.x, sensor_data.gyroscope.y, sensor_data.gyroscope.z,
+                # 罗盘方向（弧度）
+                sensor_data.compass
+            ])
 
-        self.csv_writer.writerow([
-            sensor_data.frame,
-            # 加速度（m/s²）
-            sensor_data.accelerometer.x, sensor_data.accelerometer.y, sensor_data.accelerometer.z,
-            # 角速度（rad/s）
-            sensor_data.gyroscope.x, sensor_data.gyroscope.y, sensor_data.gyroscope.z,
-            # 罗盘方向（弧度）
-            sensor_data.compass
-        ])
         # print(f"IMU Data: Accel=({sensor_data.accelerometer.x:.3f}, {sensor_data.accelerometer.y:.3f}, {sensor_data.accelerometer.z:.3f}), "
         #     f"Gyro=({sensor_data.gyroscope.x:.3f}, {sensor_data.gyroscope.y:.3f}, {sensor_data.gyroscope.z:.3f}), "
         #     f"Compass={sensor_data.compass:.3f}")

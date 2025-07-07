@@ -16,10 +16,6 @@ class SemanticLidarSensor(Sensor):
     def _setup_sensor(self, blueprint_library, walker):
         # 设置激光雷达
         lidar_bp = blueprint_library.find('sensor.lidar.ray_cast_semantic')
-
-        lidar_bp.set_attribute("dropoff_general_rate", "0.0")
-        lidar_bp.set_attribute("dropoff_intensity_limit", "1.0")
-        lidar_bp.set_attribute("dropoff_zero_intensity", "0.0")
         
         lidar_bp.set_attribute("upper_fov", str(config.LIDAR_UPPER_FOV))
         lidar_bp.set_attribute("lower_fov", str(config.LIDAR_LOWER_FOV))
@@ -28,7 +24,7 @@ class SemanticLidarSensor(Sensor):
         lidar_bp.set_attribute("rotation_frequency", str(config.LIDAR_ROTATION_FREQUENCY))
         lidar_bp.set_attribute("points_per_second", str(config.LIDAR_POINTS_PER_SECOND))
 
-        lidar_transform = carla.Transform(carla.Location(x=config.SENSOR_TRANSFORM_X, z=config.SENSOR_TRANSFORM_Z))
+        lidar_transform = carla.Transform(carla.Location(x=config.LIDAR_TRANSFORM_X, z=config.LIDAR_TRANSFORM_Z))
         lidar = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=walker)
         return lidar_bp, lidar
     
@@ -36,16 +32,22 @@ class SemanticLidarSensor(Sensor):
         """
         保存 LiDAR 点云到磁盘。
         """
-        data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=np.dtype("f4")))
-        data = np.reshape(data, (int(data.shape[0] / 4), 4))
-        points = data[:, :-1]
+
+        point_dtype = np.dtype([
+            ('x', np.float32),
+            ('y', np.float32),
+            ('z', np.float32),
+            ('cos_angle', np.float32),
+            ('obj_idx', np.uint32),
+            ('obj_tag', np.uint32)
+        ])
+
+        data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=point_dtype))
         
-        points[:, 1] = -points[:, 1]
+        # XYZ coordinates. cosine of the incident angle. index of the object. semantic tag
+        data['y'] = -data['y']
 
-        o3d_point_cloud = o3d.geometry.PointCloud()
-        o3d_point_cloud.points = o3d.utility.Vector3dVector(points)
-
-        file_path = os.path.join(f"{self.data_dir}/velodyne", '%06d.ply' % sensor_data.frame)
-        o3d.io.write_point_cloud(file_path, o3d_point_cloud)
+        file_path = os.path.join(f"{self.data_dir}/velodyne_semantic", '%06d.bin' % sensor_data.frame)
+        data.astype(point_dtype).tofile(file_path)
 
         print(f"Saved LiDAR point cloud to {file_path}")

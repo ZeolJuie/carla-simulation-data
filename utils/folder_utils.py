@@ -23,17 +23,16 @@ def create_folders(base_path, sequences_id):
     os.makedirs(os.path.join(main_folder, "semantic"), exist_ok=True)
     os.makedirs(os.path.join(main_folder, "velodyne"), exist_ok=True)
     os.makedirs(os.path.join(main_folder, "radar"), exist_ok=True)
-    os.makedirs(os.path.join(main_folder, "calib"), exist_ok=True)
-    os.makedirs(os.path.join(main_folder, "oxts"), exist_ok=True)
+    os.makedirs(os.path.join(main_folder, "velodyne_semantic"), exist_ok=True)
+    os.makedirs(os.path.join(main_folder, "velodyne_calib"), exist_ok=True)
     
 
-    print(f"create image folder{main_folder}/image")
-    print(f"create image folder{main_folder}/depth")
-    print(f"create image folder{main_folder}/semantic")
-    print(f"create lidar folder：{main_folder}/velodyne")
-    print(f"create lidar folder：{main_folder}/radar")
-    print(f"create IMU/GPS folder{main_folder}/oxts")
-    print(f"create calibreation folder{main_folder}/calib")
+    print(f"create image folder: {main_folder}/image")
+    print(f"create image folder: {main_folder}/depth")
+    print(f"create image folder: {main_folder}/semantic")
+    print(f"create lidar folder: {main_folder}/velodyne")
+    print(f"create lidar folder: {main_folder}/velodyne_semantic")
+    print(f"create ridar folder: {main_folder}/radar")
     
     return main_folder
 

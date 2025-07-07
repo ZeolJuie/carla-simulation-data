@@ -32,7 +32,7 @@ class DepthCameraSensor(Sensor):
         # depth_image = self.convert_depth_data(sensor_data)
         # np.save(file_path, depth_image)
 
-        file_path = os.path.join(f"{self.data_dir}/depth", '%06d.png' % sensor_data.frame)
+        file_path = os.path.join(f"{self.data_dir}/depth", '%06d.jpg' % sensor_data.frame)
 
         # 直接保存原始数据
         sensor_data.save_to_disk(file_path)

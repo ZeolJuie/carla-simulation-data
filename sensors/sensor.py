@@ -5,11 +5,15 @@ import time
 import queue
 import carla
 
+import config
+
+
 class Sensor:
     def __init__(self, world, blueprint_library, walker, data_dir, sensor_type):
         self.world = world
         self.data_dir = data_dir
         self.sensor_type = sensor_type
+        self.walker_blueprint_id = (walker.type_id).split(".")[-1]
         self.sensor_bp, self.sensor = self._setup_sensor(blueprint_library, walker)
 
 
@@ -20,6 +24,8 @@ class Sensor:
         raise NotImplementedError("Subclasses must implement this method")
 
     def sensor_callback(self, sensor_data, sensor_queue, sensor_name):
+        if sensor_data.frame % config.INTER_FRAME != 0:
+            return
         # 子类实现保存数据的逻辑
         self._save_data(sensor_data)
         # 父类处理通用的队列逻辑

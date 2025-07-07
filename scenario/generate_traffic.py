@@ -98,7 +98,7 @@ def main():
         metavar=('TYPE', 'NUM'),
         nargs='*',
         action='append',
-        help='Add vehicle type and quantity (e.g. --filterv car 20 --vehicle truck 10)')
+        help='Add vehicle type and quantity (e.g. --filterv car 20 --filter truck 10)')
     # 限制某些车的生成（默认从所有车中进行生成）
     argparser.add_argument(
         '--generationv',

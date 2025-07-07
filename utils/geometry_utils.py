@@ -1,4 +1,5 @@
 import numpy as np
+import carla
 
 
 def point_is_occluded(point, depth_map):
@@ -93,9 +94,13 @@ def get_image_point(loc, K, w2c):
             [   R(3x3)  T(3X1)
                 0(1x3)  1     ]
     """
-
     # Format the input coordinate (loc is a carla.Position object)
-    point = np.array([loc.x, loc.y, loc.z, 1])
+    if isinstance(loc, carla.Location):
+        point = np.array([loc.x, loc.y, loc.z, 1])
+    elif isinstance(loc, list):
+        point = np.array(loc.append(1))
+    elif isinstance(loc, np.ndarray):
+        point = np.concatenate([loc, [1]])
     # transform to camera coordinates
     point_camera = np.dot(w2c, point)
 
@@ -118,28 +123,6 @@ def point_in_canvas(pos, img_h, img_w):
     if (pos[0] >= 0) and (pos[0] < img_w) and (pos[1] >= 0) and (pos[1] < img_h):
         return True
     return False
-
-
-def get_image_point(loc, K, w2c):
-    # 计算三维坐标的二维投影
-
-    # 格式化输入坐标（loc 是一个 carla.Position 对象）
-    point = np.array([loc.x, loc.y, loc.z, 1])
-
-    # 转换到相机坐标系
-    point_camera = np.dot(w2c, point)
-
-    # 将坐标系从 UE4 的坐标系转换为标准坐标系（y, -z, x），同时移除第四个分量
-    point_camera = [point_camera[1], -point_camera[2], point_camera[0]]
-
-    # 使用相机矩阵进行三维到二维投影
-    point_img = np.dot(K, point_camera)
-
-    # 归一化
-    point_img[0] /= point_img[2]
-    point_img[1] /= point_img[2]
-
-    return point_img[0:2]
 
 
 def euler_to_rotation_matrix(roll, pitch, yaw):
@@ -183,7 +166,6 @@ def rotation_matrix_to_euler(R):
 
     return np.array([roll, pitch, yaw])
 
-
 def get_center_point(verts):
     """
     :param verts: list<Location> 顶点列表
@@ -194,3 +176,42 @@ def get_center_point(verts):
     center_y = sum(v.y for v in verts) / len(verts)
     center_z = sum(v.z for v in verts) / len(verts)
     return center_x, center_y, center_z
+
+def calculate_cube_vertices(transform, rotation, dimension):
+    """
+    计算立方体的8个顶点坐标
+    
+    参数:
+        transform (list/tuple/np.array): 立方体中心的平移向量 [x, y, z]
+        rotation (list/tuple/np.array): 立方体的旋转角度 [rx, ry, rz] (弧度)
+        dimension (list/tuple/np.array): 立方体的尺寸 [width, height, depth]
+    
+    返回:
+        np.array: 8个顶点坐标的数组，形状为(8, 3)
+    """
+    # 转换为numpy数组
+    transform = np.array(transform)
+    rotation = np.array(rotation)
+    dimension = np.array(dimension)
+    
+    # 立方体的局部坐标 (未旋转和平移前)
+    half_dim = dimension / 2.0
+    vertices_local = np.array([
+        [-1, -1, -1],  # 0: 左前下
+        [ 1, -1, -1],  # 1: 右前下
+        [ 1,  1, -1],  # 2: 右后下
+        [-1,  1, -1],  # 3: 左后下
+        [-1, -1,  1],  # 4: 左前上
+        [ 1, -1,  1],  # 5: 右前上
+        [ 1,  1,  1],  # 6: 右后上
+        [-1,  1,  1]   # 7: 左后上
+    ]) * half_dim
+    
+    # 创建旋转矩阵 (绕x, y, z轴旋转)
+    rx, ry, rz = rotation
+    rotation_matrix = euler_to_rotation_matrix(rx, ry, rz)
+    
+    # 应用旋转和平移
+    vertices_global = np.dot(vertices_local, rotation_matrix.T) + transform
+    
+    return vertices_global
