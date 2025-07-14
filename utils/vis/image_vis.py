@@ -123,53 +123,58 @@ for image_file in image_files:
             )
 
             bbox_rotation = carla.Rotation(
-                roll=obj["rotation"][0],
-                pitch=obj["rotation"][1],
-                yaw=obj["rotation"][2],
+                roll=np.degrees(obj["rotation"][0]),
+                pitch=np.degrees(obj["rotation"][1]),
+                yaw=np.degrees(obj["rotation"][2]),
             )
             bbox_extent = carla.Vector3D(
                 obj["dimensions"][0] / 2,
                 obj["dimensions"][1] / 2,
                 obj["dimensions"][2] / 2
             )
-            bbox_transform = carla.Transform(carla.Location(0, 0, 0), bbox_rotation)
+            bbox_transform = carla.Transform()
 
             bbox = carla.BoundingBox()
             bbox.location = bbox_location
             bbox.extent = bbox_extent
-            verts = bbox.get_world_vertices(bbox_transform)
-
             
-            x_max = -10000
-            x_min = 10000
-            y_max = -10000
-            y_min = 10000
+            forward_vec = ego_transform.get_forward_vector()
+            ray = bbox_location - location
 
-            for vert in verts:
-                p = get_image_point(vert, camera_K, world_to_camera)
-                if p[0] > x_max:
-                    x_max = p[0]
-                # Find the leftmost vertex
-                if p[0] < x_min:
-                    x_min = p[0]
-                # Find the highest vertex
-                if p[1] > y_max:
-                    y_max = p[1]
-                # Find the lowest  vertex
-                if p[1] < y_min:
-                    y_min = p[1]
+            if forward_vec.dot(ray) > 0:
+
+                verts = bbox.get_world_vertices(bbox_transform)
+
+                x_max = -10000
+                x_min = 10000
+                y_max = -10000
+                y_min = 10000
+
+                for vert in verts:
+                    p = get_image_point(vert, camera_K, world_to_camera)
+                    if p[0] > x_max:
+                        x_max = p[0]
+                    # Find the leftmost vertex
+                    if p[0] < x_min:
+                        x_min = p[0]
+                    # Find the highest vertex
+                    if p[1] > y_max:
+                        y_max = p[1]
+                    # Find the lowest  vertex
+                    if p[1] < y_min:
+                        y_min = p[1]
 
 
-            class_name = obj["class"]
-            occlusion = obj["occlusion"]
+                class_name = obj["class"]
+                occlusion = obj["occlusion"]
 
-            cv2.line(frame, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
-            cv2.line(frame, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
-            cv2.line(frame, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
-            cv2.line(frame, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                cv2.line(frame, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
+                cv2.line(frame, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                cv2.line(frame, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
+                cv2.line(frame, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
 
-            # 在边界框上方显示类别名称
-            cv2.putText(frame, class_name, (int(x_min),int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                # 在边界框上方显示类别名称
+                cv2.putText(frame, class_name, (int(x_min),int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     # 如果指定了保存帧，并且当前帧是目标帧，则保存图片
     if args.save_frame is not None and frame_id == args.save_frame:

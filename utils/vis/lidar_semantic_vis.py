@@ -147,7 +147,7 @@ def visualize_with_open3d(bin_file):
         ('cos_angle', np.float32), ('obj_idx', np.uint32), ('obj_tag', np.uint32)
     ])
     data = np.fromfile(bin_file, dtype=point_dtype)
-    breakpoint()
+
     # data = data[data['obj_idx'] == 1311]
 
     # 创建点云对象
@@ -194,4 +194,4 @@ def visualize_with_open3d(bin_file):
 
 
 # 调用示例
-visualize_with_open3d("carla_data/sequences/08/velodyne_semantic/002180.bin")
+visualize_with_open3d("carla_data/sequences/04/velodyne_semantic/003040.bin")

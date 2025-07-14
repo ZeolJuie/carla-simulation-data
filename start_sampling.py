@@ -57,6 +57,10 @@ def get_city_object_annotation(world, frame_id, object, walker):
         "TrafficSigns": carla.CityObjectLabel.TrafficSigns,
         "Poles": carla.CityObjectLabel.Poles,
         "Static": carla.CityObjectLabel.Static,
+        "Fences": carla.CityObjectLabel.Fences,
+        "Other": carla.CityObjectLabel.Other,
+        "Dynamic": carla.CityObjectLabel.Dynamic,
+        "GuardRail": carla.CityObjectLabel.GuardRail,
     }
 
     # 通过Static 3D Bounding Box的体积，进一步判定类别
@@ -115,7 +119,7 @@ def main(main_folder: str, args):
     world = client.get_world()
 
     # 使用CARLA预设天气（共9种预设）
-    preset = carla.WeatherParameters.WetCloudySunset
+    preset = scenario.weather
     world.set_weather(preset)
     
     try:
@@ -138,8 +142,13 @@ def main(main_folder: str, args):
             start_point = scenario.start_point
             end_point = scenario.end_points
 
-            # generate walker
-            walker = world.spawn_actor(walker_bp, carla.Transform(start_point, carla.Rotation(yaw=180)))
+            try:
+                # generate walker
+                walker = world.spawn_actor(walker_bp, carla.Transform(start_point, carla.Rotation(yaw=180)))
+            except:
+                print("RuntimeError: Spawn failed because of collision at spawn position")
+                world.apply_settings(original_settings)
+                exit()
         else:
             assert args.walker_id is not None, "Walker ID must be provided!"
             walker = world.get_actor(actor_id=int(args.walker_id))
@@ -148,7 +157,7 @@ def main(main_folder: str, args):
             walker_bp = blueprint_library.find(walker_blueprint_id)
 
         # 生成若干行人npc
-        pedestrians_num = 100 if args.no_auto_controll else 0
+        pedestrians_num = 0 if args.no_auto_controll else 100
         spawn_points = []
         for i in range(pedestrians_num):
             loc = world.get_random_location_from_navigation()
@@ -375,7 +384,7 @@ def main(main_folder: str, args):
                         # 获取 Bounding Box 的尺寸 (1/2size)
                         bbox_extent = [bbox.extent.x * 2, bbox.extent.y * 2, bbox.extent.z * 2]
 
-                        # 将世界坐标系旋转矩阵转换到传感器坐标系
+                        # 将世界坐标系旋转矩阵转角
                         npc_global_rotation = [
                             np.radians(transform.rotation.roll),
                             np.radians(transform.rotation.pitch),
@@ -401,7 +410,16 @@ def main(main_folder: str, args):
                 
                 labels.append(frame_label)
 
-                city_objects = ["TrafficLight", "TrafficSigns", "Poles", "Static"]
+                city_objects = [
+                    "TrafficLight", 
+                    "TrafficSigns", 
+                    "Poles", 
+                    "Static", 
+                    "Fences",
+                    "Other",
+                    "Dynamic",
+                    "GuardRail"
+                ]
                 for object in city_objects:
                     city_object_labels = get_city_object_annotation(
                         world = world, 

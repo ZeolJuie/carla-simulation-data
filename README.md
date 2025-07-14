@@ -72,3 +72,7 @@ nuScenes/
     
     python utils/converter/carla_to_nuscenes_converter.py 
     ```
+
+
+NOTICE
+- ego的rotation信息是角度制，labels中的rotation是弧度制
