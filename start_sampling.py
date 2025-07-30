@@ -140,7 +140,8 @@ def main(main_folder: str, args):
 
             # set start point and end point
             start_point = scenario.start_point
-            end_point = scenario.end_points
+            # end_point = scenario.end_point
+            end_point = world.get_random_location_from_navigation()
 
             try:
                 # generate walker
@@ -157,7 +158,7 @@ def main(main_folder: str, args):
             walker_bp = blueprint_library.find(walker_blueprint_id)
 
         # 生成若干行人npc
-        pedestrians_num = 0 if args.no_auto_controll else 100
+        pedestrians_num = 0 if args.no_auto_controll else 140
         spawn_points = []
         for i in range(pedestrians_num):
             loc = world.get_random_location_from_navigation()
@@ -179,6 +180,8 @@ def main(main_folder: str, args):
                 
             except Exception as e:
                 print(f"Error spawning pedestrian {i}: {e}")
+        
+        print(f"{len(pedestrians)} was successfully spawned.")
         
         
         # create all the sensors and keep them in a list for convenience.

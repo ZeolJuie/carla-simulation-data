@@ -8,7 +8,7 @@ class Scenario:
         
         self.map_name = map_name
         self.start_point = start_point
-        self.end_points = end_point
+        self.end_point = end_point
         self.weather = weather
         self.description = description
 

@@ -84,6 +84,58 @@ scenarios = [
         end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
         description = "NOTE: Chairs and tables oot detected in (Semantic) LiDAR"
     ),
+
+    Scenario(
+        sequence_id = '30',
+        map_name = "Town03",
+        start_point = carla.Location(x=3.287439, y=-214.211899, z=0.160252),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+    Scenario(
+        sequence_id = '50',
+        map_name = "Town04",
+        start_point = carla.Location(x=56.713779, y=-233.425293, z=0.184139),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+    Scenario(
+        sequence_id = '60',
+        map_name = "Town04",
+        start_point = carla.Location(x=200.03, y=-238.78, z=0.69),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+    Scenario(
+        sequence_id = '70',
+        map_name = "Town05",
+        start_point = carla.Location(x=11.359136, y=81.200912, z=0.156784),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+    Scenario(
+        sequence_id = '80',
+        map_name = "Town05",
+        start_point = carla.Location(x=-115.59, y=-21.96, z=1.1),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+
+    Scenario(
+        sequence_id = '90',
+        map_name = "Town10HD",
+        start_point = carla.Location(x=-100.59, y=-21.96, z=1.1),
+        end_point = carla.Location(x=27.677645, y=58.019924, z=0.158620),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+
+    
     
 ]
 
