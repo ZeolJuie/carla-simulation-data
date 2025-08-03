@@ -67,7 +67,7 @@ def main(args):
 
             try:
                 # generate walker
-                walker = world.spawn_actor(walker_bp, carla.Transform(start_point, carla.Rotation(yaw=180)))
+                walker = world.spawn_actor(walker_bp, carla.Transform(start_point, carla.Rotation(yaw=0)))
             except:
                 print("RuntimeError: Spawn failed because of collision at spawn position")
                 world.apply_settings(original_settings)

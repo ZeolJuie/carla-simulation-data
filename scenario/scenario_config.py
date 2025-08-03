@@ -57,7 +57,7 @@ scenarios = [
         map_name = "Town01",
         start_point = carla.Location(x=84.410812, y=210.617783, z=0.105408),
         end_point = carla.Location(x=83.739311, y=125.949089, z=0.105408),
-        description = "Pedestrians go straight and cross the bridge"
+        description = "go straight and cross the bridge"
     ),
 
     Scenario(
@@ -65,16 +65,16 @@ scenarios = [
         map_name = "Town01",
         start_point = carla.Location(x=123.108704, y=136.192139, z=0.105408),
         end_point = carla.Location(x=121.626068, y=191.188446, z=0.105408),
-        description = "Pedestrians go straight and cross the bridge, double left-turn"
+        description = "go straight and cross the bridge, double left-turn"
     ),
 
     Scenario(
         sequence_id = '09',
         map_name = "Town01",
-        start_point = carla.Location(x=196.352036, y=200.662750, z=1.230720),
-        end_point = carla.Location(x=252.039078, y=201.616547, z=0.107688),
+        start_point = carla.Location(x=108.207832, y=51.613781, z=0.105408),
+        end_point = carla.Location(x=17.950916, y=-6.312346, z=0.105408),
         weather = carla.WeatherParameters.ClearNoon,
-        description = "Manual controll"
+        description = "Manual controll. A pedestrian walks through a small town, passes a busy minor intersection, goes by a bus stop, and finally arrives in front of a house."
     ),
 
     Scenario(
@@ -136,6 +136,87 @@ scenarios = [
 
 
     
+    
+    # ------------------------ 住宅区街道 --------------------
+    Scenario(
+        sequence_id = '11',
+        map_name = "Town02",
+        start_point = carla.Location(x=198, y=275, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '11',
+        map_name = "Town02",
+        start_point = carla.Location(x=198, y=275, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '12',
+        map_name = "Town02",
+        start_point = carla.Location(x=198, y=295, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = "Manual controll"
+    ),
+
+    Scenario(
+        sequence_id = '13',
+        map_name = "Town02",
+        start_point = carla.Location(x=78, y=200, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = "Manual controll, Urban, many pedestrians on the sidewalk"
+    ),
+
+    Scenario(
+        sequence_id = '14',
+        map_name = "Town02",
+        start_point = carla.Location(x=22, y=100, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = "Manual controll, Urban, Turn Left"
+    ),
+
+    Scenario(
+        sequence_id = '25',
+        map_name = "Town06",
+        start_point = carla.Location(x=64.265198, y=-32.307999, z=0.206403),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '35',
+        map_name = "Town06",
+        start_point = carla.Location(x=14.797142, y=-30.197739, z=1.196110),
+        end_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '36',
+        map_name = "Town06",
+        start_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        end_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '45',
+        map_name = "Town07",
+        start_point = carla.Location(x=-22.712111, y=-72.468132, z=1.160000),
+        end_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '45',
+        map_name = "Town12",
+        start_point = carla.Location(x=-22.712111, y=-72.468132, z=1.160000),
+        end_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        description = ""
+    ),
     
 ]
 
