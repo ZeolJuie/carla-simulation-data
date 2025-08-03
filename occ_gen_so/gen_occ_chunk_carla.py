@@ -18,7 +18,7 @@ if __name__ == '__main__':
     parse = ArgumentParser()
 
     # parse.add_argument('--data_path', type=str, default="/mnt/ws-data/data/project/SurroundOcc/tools/generate_occupancy_with_own_data/gt_generation_template")
-    parse.add_argument('--data_path', type=str, default="/mnt/ws-data/data/project/occ_gen/carla_sync/template_record") # record_1730339723
+    parse.add_argument('--data_path', type=str, default="/home/zhoumohan/codes/carla_data_occ_gen/carla_sync/record_1751378877") # record_1730339723
     parse.add_argument('--out_path', type=str, default=None)
     parse.add_argument('--config_path', type=str, default='./carla_data/config.yaml')
     parse.add_argument('--len_sequence', type=int, default=20)  

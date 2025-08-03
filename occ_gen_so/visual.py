@@ -43,9 +43,9 @@ if __name__=="__main__":
     from argparse import ArgumentParser
     parse = ArgumentParser()
     
-    parse.add_argument('--visual_path', type=str, default="/mnt/ws-data/data/project/occ_gen/carla_sync/template_record/occ/sample_173044451416/labels.npy")
+    parse.add_argument('--visual_path', type=str, default="/home/zhoumohan/codes/carla_data_occ_gen/carla_sync/record_1751378877/occ/sample_175137887852/labels.npz")
     # parse.add_argument('--visual_path', type=str, default="/mnt/ws-data/data/data/nuscenes/mini/occ_gt_no_possion/occ_gt_raw/dense_voxels_with_semantic/n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603547590.pcd.bin.npy")
-    parse.add_argument('--visual_save_dir', type=str, default="/mnt/ws-data/data/project/SurroundOcc/tools/generate_occupancy_with_own_data/occ_result/visual_save")
+    parse.add_argument('--visual_save_dir', type=str, default="/home/zhoumohan/codes/carla_data_occ_gen")
     args = parse.parse_args()
     visual_path = args.visual_path
     visual_save_dir = args.visual_save_dir

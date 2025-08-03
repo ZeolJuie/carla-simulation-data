@@ -1,4 +1,7 @@
 import sys
+import time
+import glob
+from pyface.timer.api import Timer
 sys.path.append('.')
 sys.path.append('..')
  
@@ -9,7 +12,7 @@ import numpy as np
 from carla_sync.globals import get_global
 
 FREE_LABEL = 17
-VOXEL_SIZE = 0.4
+VOXEL_SIZE = 0.2
 POINT_CLOUD_RANGE = [-40, -40, -3]
 
 LABEL_COLORS = get_global('LABEL_COLORS') * 255
@@ -17,29 +20,40 @@ alpha = np.ones((LABEL_COLORS.shape[0], 1)) * 255
 LABEL_COLORS = np.concatenate((LABEL_COLORS, alpha), axis=1)
 LABEL_COLORS = LABEL_COLORS.astype(np.uint8)
  
+color_map = {
+        0: (0, 0, 0),        # Unlabeled
+        1: (128, 64, 128),   # Roads
+        2: (244, 35, 232),   # SideWalks
+        3: (70, 70, 70),     # Building
+        4: (102, 102, 156),  # Wall
+        5: (190, 153, 153),  # Fence
+        6: (153, 153, 153), # Pole
+        7: (250, 170, 30),  # TrafficLight
+        8: (220, 220, 0),   # TrafficSign
+        9: (107, 142, 35),  # Vegetation
+        10: (152, 251, 152),# Terrain
+        11: (70, 130, 180), # Sky
+        12: (220, 20, 60),  # Pedestrian
+        13: (255, 0, 0),    # Rider
+        14: (0, 0, 142),    # Car
+        15: (0, 0, 70),     # Truck
+        16: (0, 60, 100),   # Bus
+        17: (0, 80, 100),   # Train
+        18: (0, 0, 230),    # Motorcycle
+        19: (119, 11, 32),  # Bicycle
+        20: (110, 190, 160),# Static
+        21: (170, 120, 50), # Dynamic
+        22: (55, 90, 80),   # Other
+        23: (45, 60, 150),  # Water
+        24: (157, 234, 50), # RoadLine
+        25: (81, 0, 81),    # Ground
+        26: (150, 100, 100),# Bridge
+        27: (230, 150, 140),# RailTrack
+        28: (180, 165, 180) # GuardRail
+    }
  
 colors_nuscenes = np.array(
-    [
-        [0,   0,   0, 255],  # 0 undefined
-        [112, 128, 144, 255],  # 1 barrier  orange
-        [220, 20, 60, 255],    # 2 bicycle  Blue
-        [255, 127, 80, 255],   # 3 bus  Darkslategrey
-        [255, 158, 0, 255],  # 4 car  Crimson
-        [233, 150, 70, 255],   # 5 cons. Veh  Orangered
-        [255, 61, 99, 255],  # 6 motorcycle  Darkorange
-        [0, 0, 230, 255], # 7 pedestrian  Darksalmon
-        [47, 79, 79, 255],  # 8 traffic cone  Red
-        [255, 140, 0, 255],# 9 trailer  Slategrey
-        [255, 99, 71, 255],# 10 truck Burlywood
-        [0, 207, 191, 255],    # 11 drive sur  Green
-        [175, 0, 75, 255],  # 12 other lat  nuTonomy green
-        [75, 0, 75, 255],  # 13 sidewalk
-        [112, 180, 60, 255],    # 14 terrain
-        [222, 184, 135, 255],    # 15 manmade
-        # [255, 255, 255, 255],    # 15 manmade
-        [0, 175, 0, 255],   # 16 vegeyation
-        # [255, 255, 255, 255], # free label 
-    ]
+    list(color_map.values())
 ).astype(np.uint8)
 
 def voxel2points(pred_occ, mask_camera = None, free_label = FREE_LABEL):
@@ -59,6 +73,8 @@ def voxel2points(pred_occ, mask_camera = None, free_label = FREE_LABEL):
     fov_voxels[:, 2] += POINT_CLOUD_RANGE[2]
     return fov_voxels
 
+current_frame = 0
+
 def occ_show(pred_occ, mask_camera = None, data_type = 'nuscenes'):
     if data_type == 'nuscenes':
         vmax = 16
@@ -68,32 +84,57 @@ def occ_show(pred_occ, mask_camera = None, data_type = 'nuscenes'):
         vmax = 24
         free_label = 25
         colors = LABEL_COLORS
+        
 
-    fov_voxels = voxel2points(pred_occ, mask_camera, free_label=free_label)
-  
-    fov_voxels = fov_voxels[fov_voxels[..., 3] > 0] if data_type=='carla' else fov_voxels
+    def update_frame():
+        global current_frame
+
+        mlab.clf()  # 清除上一帧
+
+        pred = pred_occ[current_frame]
+
+        fov_voxels = voxel2points(pred, mask_camera, free_label=free_label)
+    
+        fov_voxels = fov_voxels[fov_voxels[..., 3] > 0] if data_type=='carla' else fov_voxels
+        mlab.clf()  # 清除上一帧
+
+        plt_plot_fov = mlab.points3d(
+            fov_voxels[:, 0],
+            fov_voxels[:, 1],
+            fov_voxels[:, 2],
+            fov_voxels[:, 3],
+            colormap="viridis",
+            scale_factor=VOXEL_SIZE - 0.05*VOXEL_SIZE,
+            mode="cube",
+            opacity=1.0,
+            vmin=0,
+            vmax=vmax,
+        )
+
+        plt_plot_fov.glyph.scale_mode = "scale_by_vector"
+        plt_plot_fov.module_manager.scalar_lut_manager.lut.table = colors
+        current_frame = (current_frame + 1) % len(pred_occ)
+
     figure = mlab.figure(size=(600, 600), bgcolor=(1, 1, 1))
-    plt_plot_fov = mlab.points3d(
-        fov_voxels[:, 0],
-        fov_voxels[:, 1],
-        fov_voxels[:, 2],
-        fov_voxels[:, 3],
-        colormap="viridis",
-        scale_factor=VOXEL_SIZE - 0.05*VOXEL_SIZE,
-        mode="cube",
-        opacity=1.0,
-        vmin=0,
-        vmax=vmax,
-    )
-
-    plt_plot_fov.glyph.scale_mode = "scale_by_vector"
-    plt_plot_fov.module_manager.scalar_lut_manager.lut.table = colors
+    timer = Timer(500, update_frame)
 
     mlab.show()
-    
+
 if __name__=="__main__":
     # pred_occ_path = "/mnt/ws-data/data/data/nuscenes/mini/gts/scene-0103/3e8750f331d7499e9b5123e9eb70f2e2/labels.npz"
-    pred_occ_path = "./carla_sync/template_record/occ/sample_173044451416/labels.npz"
+    # pred_occ_path = "/home/zhoumohan/codes/carla-simulation-data/carla_data/sequences/08/occ/sample_313330/labels.npz"
+    pred_occ_path = "/home/zhoumohan/codes/carla-simulation-data/carla_data/sequences/01/occ/sample_061000/labels.npz"  # 替换为你的序列目录
     pred_occ = np.load(pred_occ_path, allow_pickle=True)['semantics']
     
-    occ_show(pred_occ, data_type='carla')
+    # occ_show(pred_occ, data_type='carla')
+    path_pattern = "/home/zhoumohan/codes/carla-simulation-data/carla_data/sequences/01/occ/sample_*/labels.npz"
+
+    # 获取所有匹配的文件路径
+    file_paths = sorted(glob.glob(path_pattern))
+
+    pred_occ_list = []
+
+    for file in file_paths:
+        pred_occ = np.load(file, allow_pickle=True)['semantics']
+        pred_occ_list.append(pred_occ)
+    occ_show(pred_occ_list, data_type='carla')

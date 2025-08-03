@@ -1,0 +1,3 @@
+# ninja log v6
+1	14203	1751380299485772422	/home/zhoumohan/codes/carla_data_occ_gen/occ_gen_so/chamfer_dist/build/temp.linux-x86_64-cpython-37/chamfer_cuda.o	8016aee9100a93f6
+0	27788	1751380299485772422	/home/zhoumohan/codes/carla_data_occ_gen/occ_gen_so/chamfer_dist/build/temp.linux-x86_64-cpython-37/chamfer.o	60e3da60b46cad69
