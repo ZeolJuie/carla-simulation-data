@@ -44,6 +44,7 @@ nuScenes/
 - Load Map
     ```
     python ~/carla/CARLA_0.9.15/PythonAPI/util/config.py -m Town01
+    python ~/carla/PythonAPI/util/config.py -m Town01
     ```
 - Generate Traffic
     ```

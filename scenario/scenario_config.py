@@ -84,6 +84,139 @@ scenarios = [
         end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
         description = "NOTE: Chairs and tables oot detected in (Semantic) LiDAR"
     ),
+
+    Scenario(
+        sequence_id = '30',
+        map_name = "Town03",
+        start_point = carla.Location(x=3.287439, y=-214.211899, z=0.160252),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+    Scenario(
+        sequence_id = '50',
+        map_name = "Town04",
+        start_point = carla.Location(x=56.713779, y=-233.425293, z=0.184139),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+    Scenario(
+        sequence_id = '60',
+        map_name = "Town04",
+        start_point = carla.Location(x=200.03, y=-238.78, z=0.69),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+    Scenario(
+        sequence_id = '70',
+        map_name = "Town05",
+        start_point = carla.Location(x=11.359136, y=81.200912, z=0.156784),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+    Scenario(
+        sequence_id = '80',
+        map_name = "Town05",
+        start_point = carla.Location(x=-115.59, y=-21.96, z=1.1),
+        end_point = carla.Location(x=4.920612, y=241.709656, z=0.105408),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+
+    Scenario(
+        sequence_id = '90',
+        map_name = "Town10HD",
+        start_point = carla.Location(x=-100.59, y=-21.96, z=1.1),
+        end_point = carla.Location(x=27.677645, y=58.019924, z=0.158620),
+        description = "Long sequence capture and for clip segmentation"
+    ),
+
+
+    
+    
+    # ------------------------ 住宅区街道 --------------------
+    Scenario(
+        sequence_id = '11',
+        map_name = "Town02",
+        start_point = carla.Location(x=198, y=275, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '11',
+        map_name = "Town02",
+        start_point = carla.Location(x=198, y=275, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '12',
+        map_name = "Town02",
+        start_point = carla.Location(x=198, y=295, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = "Manual controll"
+    ),
+
+    Scenario(
+        sequence_id = '13',
+        map_name = "Town02",
+        start_point = carla.Location(x=78, y=200, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = "Manual controll, Urban, many pedestrians on the sidewalk"
+    ),
+
+    Scenario(
+        sequence_id = '14',
+        map_name = "Town02",
+        start_point = carla.Location(x=22, y=100, z=1.109136),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = "Manual controll, Urban, Turn Left"
+    ),
+
+    Scenario(
+        sequence_id = '25',
+        map_name = "Town06",
+        start_point = carla.Location(x=64.265198, y=-32.307999, z=0.206403),
+        end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '35',
+        map_name = "Town06",
+        start_point = carla.Location(x=14.797142, y=-30.197739, z=1.196110),
+        end_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '36',
+        map_name = "Town06",
+        start_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        end_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '45',
+        map_name = "Town07",
+        start_point = carla.Location(x=-22.712111, y=-72.468132, z=1.160000),
+        end_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        description = ""
+    ),
+
+    Scenario(
+        sequence_id = '45',
+        map_name = "Town12",
+        start_point = carla.Location(x=-22.712111, y=-72.468132, z=1.160000),
+        end_point = carla.Location(x=16.164064, y=121.149925, z=1.176403),
+        description = ""
+    ),
     
     # ------------------------ 住宅区街道 --------------------
     Scenario(
