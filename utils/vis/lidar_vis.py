@@ -82,4 +82,3 @@ def visualize_with_open3d(bin_file):
 
 # 调用示例
 visualize_with_open3d("carla_data/sequences/10/velodyne/395450.bin")
-# visualize_ply_file("carla_data/sequences/04/velodyne/043357.ply")

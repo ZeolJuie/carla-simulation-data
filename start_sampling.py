@@ -70,7 +70,7 @@ def get_city_object_annotation(world, frame_id, object, walker):
     for bb in bounding_box_set:
 
         # Filter for distance from ego vehicle
-        if bb.location.distance(walker.get_transform().location) < 50:
+        if bb.location.distance(walker.get_transform().location) < config.VALID_DISTANCE:
 
             # Cycle through the vertices
             verts = [v for v in bb.get_world_vertices(carla.Transform())]
@@ -141,6 +141,7 @@ def main(main_folder: str, args):
             # set start point and end point
             start_point = scenario.start_point
             end_point = scenario.end_points
+            end_point = world.get_random_location_from_navigation()
 
             try:
                 # generate walker
@@ -157,7 +158,7 @@ def main(main_folder: str, args):
             walker_bp = blueprint_library.find(walker_blueprint_id)
 
         # 生成若干行人npc
-        pedestrians_num = 0 if args.no_auto_controll else 100
+        pedestrians_num = 0 if args.no_auto_controll else 50
         spawn_points = []
         for i in range(pedestrians_num):
             loc = world.get_random_location_from_navigation()

@@ -94,9 +94,6 @@ def convert_to_kitti_format(sequences: List[str]):
             f.write(times_line)
 
         print('done')
-        
-
-
 
 
 

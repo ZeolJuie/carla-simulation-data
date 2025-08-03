@@ -198,13 +198,13 @@ def calculate_cube_vertices(transform, rotation, dimension):
     half_dim = dimension / 2.0
     vertices_local = np.array([
         [-1, -1, -1],  # 0: 左前下
-        [ 1, -1, -1],  # 1: 右前下
-        [ 1,  1, -1],  # 2: 右后下
-        [-1,  1, -1],  # 3: 左后下
+        [-1,  1, -1],  # 1: 右前下
+        [ 1, -1, -1],  # 2: 右后下
+        [ 1,  1, -1],  # 3: 左后下
         [-1, -1,  1],  # 4: 左前上
-        [ 1, -1,  1],  # 5: 右前上
-        [ 1,  1,  1],  # 6: 右后上
-        [-1,  1,  1]   # 7: 左后上
+        [-1,  1,  1],  # 5: 右前上
+        [ 1, -1,  1],  # 6: 右后上
+        [ 1,  1,  1]   # 7: 左后上
     ]) * half_dim
     
     # 创建旋转矩阵 (绕x, y, z轴旋转)
@@ -215,3 +215,40 @@ def calculate_cube_vertices(transform, rotation, dimension):
     vertices_global = np.dot(vertices_local, rotation_matrix.T) + transform
     
     return vertices_global
+
+def get_extrinsic_matrix(x, y, z, roll, pitch, yaw):
+    """
+    根据平移和欧拉角生成4x4外参矩阵
+    
+    参数:
+        x, y, z: 平移分量 (单位: 米)
+        roll, pitch, yaw: 绕X/Y/Z轴的旋转角度 (单位: 弧度)
+        (roll: X轴, pitch: Y轴, yaw: Z轴)
+    
+    返回:
+        4x4 numpy数组表示的齐次变换矩阵
+        格式:
+        [[R11, R12, R13, x],
+         [R21, R22, R23, y],
+         [R31, R32, R33, z],
+         [0,   0,   0,   1]]
+    """
+
+    # 计算旋转矩阵的各元素 (使用简写符号)
+    cr, sr = np.cos(roll), np.sin(roll)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    
+    # 构建旋转矩阵 (Z-Y-X顺序，即yaw->pitch->roll)
+    rotation_matrix = np.array([
+        [cy*cp,  cy*sp*sr - sy*cr,  cy*sp*cr + sy*sr],
+        [sy*cp,  sy*sp*sr + cy*cr,  sy*sp*cr - cy*sr],
+        [  -sp,            cp*sr,            cp*cr]
+    ])
+    
+    # 构建4x4齐次变换矩阵
+    extrinsic = np.eye(4)
+    extrinsic[:3, :3] = rotation_matrix
+    extrinsic[:3, 3] = [x, y, z]
+    
+    return extrinsic

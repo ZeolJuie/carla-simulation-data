@@ -115,6 +115,8 @@ for image_file in image_files:
         objects = label_dict[frame_id]
 
         for obj in objects:
+            if obj["occlusion"] == 4:
+                continue
             # 提取边界框 - 计算全局坐标系下的8个顶点坐标
             bbox_location = carla.Location(
                 obj["location"][0],
@@ -143,7 +145,11 @@ for image_file in image_files:
 
             if forward_vec.dot(ray) > 0:
 
-                verts = bbox.get_world_vertices(bbox_transform)
+                verts = calculate_cube_vertices(
+                    transform=obj["location"],
+                    rotation=obj["rotation"],
+                    dimension=obj["dimensions"]
+                )
 
                 x_max = -10000
                 x_min = 10000
@@ -167,6 +173,7 @@ for image_file in image_files:
 
                 class_name = obj["class"]
                 occlusion = obj["occlusion"]
+                object_id = str(obj["object_id"])
 
                 cv2.line(frame, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
                 cv2.line(frame, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
@@ -174,7 +181,9 @@ for image_file in image_files:
                 cv2.line(frame, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
 
                 # 在边界框上方显示类别名称
-                cv2.putText(frame, class_name, (int(x_min),int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.putText(frame, class_name, (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                # 在边界框上方显示跟踪ID
+                cv2.putText(frame, object_id, (int(x_max) - 20, int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     # 如果指定了保存帧，并且当前帧是目标帧，则保存图片
     if args.save_frame is not None and frame_id == args.save_frame:

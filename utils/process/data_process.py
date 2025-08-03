@@ -5,6 +5,9 @@ import json
 import os
 
 import cv2
+import torch
+from tqdm import tqdm
+from mmcv.ops.points_in_boxes import points_in_boxes_cpu 
 
 from utils.geometry_utils import *
 
@@ -196,14 +199,78 @@ def process_all_frame_labels():
     with open(label_path, "w") as f:
         json.dump(labels, f, indent=4)
 
-def process_occlusion_by_lidar():
+def get_bounding_box(obj_anno):
+    location = obj_anno["location"]
+    dimensions = [
+        obj_anno["dimensions"][0],
+        obj_anno["dimensions"][1],
+        obj_anno["dimensions"][2]
+    ]
+    rotation_z = obj_anno["rotation"][2]
+    bottom_center = [
+        location[0],
+        location[1],
+        location[2] - dimensions[2]/2
+    ]
+    
+    converted = bottom_center + dimensions + [rotation_z]
+    
+    return converted
+
+
+def process_occlusion_by_lidar(sequence_dir):
     """
         使用（语义）激光雷达判定遮挡情况
     """
-    # 1. 读取语义激光雷达数据和label.json
 
-    # 2. 根据雷达第五维instance id, 确定动态障碍物（Car， Pedestrian）的点云覆盖情况
+    # 0. define point cloud numpy data type
+    point_dtype = np.dtype([
+        ('x', np.float32), ('y', np.float32), ('z', np.float32),
+        ('cos_angle', np.float32), ('obj_idx', np.uint32), ('obj_tag', np.uint32)
+    ])
 
+    # 1. label.json 获取global bounding box
+    label_path = os.path.join(sequence_dir, "labels.json")
+    with open(label_path, "r") as f:
+        labels = json.load(f)
+    
+    # 遍历所有帧
+    for frame in tqdm(labels):
+        # 2. load lidar point cloud
+
+        lidar_path = os.path.join(sequence_dir, "velodyne_semantic", f"{frame['frame_id']}.bin")
+        transform_matrix_path = os.path.join(sequence_dir, "velodyne_calib", f"{frame['frame_id']}.npy")
+
+        points = np.fromfile(lidar_path, dtype=point_dtype)
+
+        # process to N*3
+        pc_lidar = np.column_stack([points['x'], -points['y'], points['z']])
+
+        # load lidar to world matrix
+        lidar_2_world = np.load(transform_matrix_path, allow_pickle=True)
+
+        # transform lidar to world coordinate
+        N = pc_lidar.shape[0]
+        homogeneous_coords = np.hstack([pc_lidar, np.ones((N, 1))])
+        pc_world = (lidar_2_world @ homogeneous_coords.T).T
+        pc_world = pc_world[:, :3]
+
+        # 3. load all boxes
+        boxes = [get_bounding_box(obj) for obj in frame["objects"]]
+        boxes = np.array(boxes)
+
+        B = torch.from_numpy(pc_world[:, :3][np.newaxis, :, :]) 
+        M = torch.from_numpy(boxes[np.newaxis, :])
+        M[0, :, 6] *= -1  
+        points_in_boxes = points_in_boxes_cpu(B, M)
+        for i in range(points_in_boxes.shape[-1]):
+            points_in_box = sum(points_in_boxes[0][:,i])
+            if points_in_box == 0:
+                frame["objects"][i]["occlusion"] = 4
+
+    # save to json
+    with open(label_path, "w") as f:
+        json.dump(labels, f, indent=4)
 
 
 
@@ -223,9 +290,12 @@ def generate_static_object_id(sequence_dir):
     # 创建待分配的new id，在该序列中唯一，从10000开始分配 CityObject id
     new_id = 10000
 
+    exist_ids = set()
+
     # 3. 遍历frame，当前帧下，统计已分配的ID
     for frame in labels:
-        exist_ids = [obj['object_id'] for obj in frame['objects']]
+        current_exist_ids = [obj['object_id'] for obj in frame['objects']]
+        exist_ids.union(set(current_exist_ids))
         
         # 4. 遍历当前帧下所有ID = -1 （采集时标记的CityObject）的Object
         for obj in frame['objects']:
@@ -244,7 +314,7 @@ def generate_static_object_id(sequence_dir):
                 while new_id in exist_ids:
                     new_id += 1
                 obj['object_id'] = new_id
-                exist_ids.append(new_id)
+                exist_ids.add(new_id)
                 object_map[object_location] = obj['object_id']
 
     # 保存更新后的标签
@@ -261,6 +331,9 @@ if __name__ == "__main__":
     # 使用深度相机信息，计算相机视角下的遮挡
     # process_occlusion_by_lidar()
     # process_all_frame_occlusion(sequence_dir)
+
+    # 使用雷达点数量，粗略判断遮挡
+    # process_occlusion_by_lidar(sequence_dir)
 
     # 去除Poles灯泡
 

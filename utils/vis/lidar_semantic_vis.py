@@ -1,15 +1,87 @@
 import open3d as o3d
 import numpy as np
+import carla
 
 import argparse
 import json
+import glob
 import time
+import os
+import sys
+import csv
+sys.path.append('.')
+
+from utils.geometry_utils import calculate_cube_vertices
+
+
+def get_sorted_frame_files(sequence_dir):
+    """Get sorted list of frame files in a sequence"""
+    bin_files = glob.glob(os.path.join(sequence_dir, "*.bin"))
+    # Extract frame numbers and sort
+    frame_files = sorted(bin_files, key=lambda x: int(os.path.basename(x).split('.')[0]))
+    return frame_files
 
 
 parser = argparse.ArgumentParser(description="Visualize point cloud with 3D bounding boxes")
 parser.add_argument("--show_boxes", type=str, help="show 3D bounding boxes")
+parser.add_argument("--sequence", type=str, default="01", help="sequence number to visualize")
+parser.add_argument("--delay", type=float, default=0.5, help="delay between frames in seconds")
+parser.add_argument("--frame", type=str, help="")
 args = parser.parse_args()
 
+sequence_dir = f"carla_data/sequences/{args.sequence}/velodyne_semantic/"
+label_path = f"carla_data/sequences/{args.sequence}/labels.json"
+ego_path = f"carla_data/sequences/{args.sequence}/ego.csv"
+calib_path = f"carla_data/sequences/{args.sequence}/calib.json"
+
+# Load label data once
+with open(label_path, "r") as f:
+    labels = json.load(f)
+all_frame_objects = {str(frame['frame_id']): frame['objects'] for frame in labels}
+
+# Get sorted frame files
+frame_files = get_sorted_frame_files(sequence_dir)
+
+if not frame_files:
+    print(f"No point cloud files found in {sequence_dir}")
+
+with open(calib_path, "r") as f:
+    calib = json.load(f)
+lidar_to_ego = np.array(calib["sensors"]["velodyne"]["extrinsic"]["matrix"])
+
+lidar_2_world_map = dict()
+with open(ego_path) as csvfile:
+    reader = csv.DictReader(csvfile)
+    for ego in reader:
+        ego_transform = carla.Transform(
+            location=carla.Location(
+                float(ego['location_x']),
+                float(ego['location_y']),
+                float(ego['location_z'])
+            ),
+            rotation=carla.Rotation(
+                roll=float(ego['rotation_roll']),
+                pitch=float(ego['rotation_pitch']),
+                yaw=float(ego['rotation_yaw'])
+            )
+        )
+
+        ego_to_world = ego_transform.get_matrix()
+        lidar_2_world_map[ego['frame']] = ego_to_world @ lidar_to_ego
+
+
+def point_transform_3d(loc, M):
+    """ 
+        Transform a 3D point using a 4x4 matrix
+    """
+ 
+    point = np.array([loc.x, loc.y, loc.z, 1]) if isinstance(loc, carla.libcarla.Location) else np.array([loc[0], loc[1], loc[2], 1])
+    point_transformed = np.dot(M, point)
+    # normalize, 其实最后一位就是1.0
+    point_transformed[0] /= point_transformed[3]
+    point_transformed[1] /= point_transformed[3]
+    point_transformed[2] /= point_transformed[3]
+    return point_transformed[:3]
 
 def get_label_color(label):
     """
@@ -136,62 +208,130 @@ def create_3d_box(center, size, rotation):
 
     return line_set
 
-def visualize_with_open3d(bin_file):
+def visualize_frame(frame_id):
 
-    # vis = o3d.visualization.Visualizer()
-    # vis.create_window()
+    frame_file = f"carla_data/sequences/{args.sequence}/velodyne_semantic/{frame_id}.bin"
 
-    # 加载数据
+    # Point cloud data type
     point_dtype = np.dtype([
         ('x', np.float32), ('y', np.float32), ('z', np.float32),
         ('cos_angle', np.float32), ('obj_idx', np.uint32), ('obj_tag', np.uint32)
     ])
-    data = np.fromfile(bin_file, dtype=point_dtype)
-
-    # data = data[data['obj_idx'] == 1311]
-
-    # 创建点云对象
-    pcd = o3d.geometry.PointCloud()
+    data = np.fromfile(frame_file, dtype=point_dtype)
     
+    pcd = o3d.geometry.PointCloud()    
+
     # 设置点坐标（y已经取反）
-    points = np.column_stack([data['x'], data['y'], data['z']])
+    points = np.column_stack([data['x'], -data['y'], data['z']])
     pcd.points = o3d.utility.Vector3dVector(points)
     
     # 设置点颜色（根据语义标签）
     colors = np.array([get_label_color(tag) for tag in data['obj_tag']]) / 255.0
     pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
 
-    # 添加点云到可视化窗口
-    # vis.add_geometry(pcd)
+    boxes = []
 
-    if args.show_boxes:
-        # 获取当前帧的标签数据
-        label_path = f"./carla_data/sequences/07/labels.json"
+    for obj in all_frame_objects[frame_id]:
+        lines = np.array([
+            [0, 1], [0, 2], [1, 3], [2, 3],  # 底面
+            [4, 5], [4, 6], [5, 7], [6, 7],  # 顶面
+            [0, 4], [1, 5], [2, 6], [3, 7]   # 侧面
+        ])
 
-        # 加载标签数据
-        with open(label_path, "r") as f:
-            labels = json.load(f)
+        verts = calculate_cube_vertices(
+            transform=obj["location"],
+            rotation=obj["rotation"],
+            dimension=obj["dimensions"]
+        )
+
+        world_2_lidar = np.linalg.inv(lidar_2_world_map[frame_id])
+        bbox_vert_lidar = [point_transform_3d(vert, world_2_lidar) for vert in verts]
+        bbox_vert_lidar = np.array(bbox_vert_lidar)
         
-        all_frame_objects = {str(frame['frame_id']): frame['objects'] for frame in labels}
+        # 创建LineSet
+        line_set = o3d.geometry.LineSet()
+        line_set.points = o3d.utility.Vector3dVector(bbox_vert_lidar)
+        line_set.lines = o3d.utility.Vector2iVector(lines)
+        boxes.append(line_set)
 
-        frame_id = '004340'
-        for obj in all_frame_objects[frame_id]:
-            # 提取 3D 边界框数据
-            dimensions = obj["dimensions"]  # [height, width, length]
-            location = obj["location"]      # [x, y, z]
-            rotation = obj["rotation"]      # 欧拉角
 
-            # 创建 3D 边界框
-            bbox = create_3d_box(location, dimensions, rotation)
-            vis.add_geometry(bbox)
-    
     o3d.visualization.draw_geometries(
-        [pcd],
+        [pcd] + boxes,
         window_name="LiDAR Point Cloud with Semantics",
         width=1024,
         height=768,
     )
 
 
-# 调用示例
-visualize_with_open3d("carla_data/sequences/04/velodyne_semantic/003040.bin")
+def visualize_sequence():
+    
+    # Set up visualization
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(window_name="LiDAR Point Cloud with Semantics", width=1024, height=768)
+
+    # Point cloud data type
+    point_dtype = np.dtype([
+        ('x', np.float32), ('y', np.float32), ('z', np.float32),
+        ('cos_angle', np.float32), ('obj_idx', np.uint32), ('obj_tag', np.uint32)
+    ])
+
+    pcd = o3d.geometry.PointCloud()    
+    is_first_frame = True
+
+    # Main visualization loop
+    for frame_file in frame_files:
+
+        frame_id = os.path.basename(frame_file).split('.')[0]
+
+        # Load point cloud data
+        data = np.fromfile(frame_file, dtype=point_dtype)
+        points = np.column_stack([data['x'], -data['y'], data['z']])
+        colors = np.array([get_label_color(tag) for tag in data['obj_tag']]) / 255.0
+
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
+
+        vis.clear_geometries()
+        
+        for obj in all_frame_objects[frame_id]:
+            lines = np.array([
+                [0, 1], [0, 2], [1, 3], [2, 3],  # 底面
+                [4, 5], [4, 6], [5, 7], [6, 7],  # 顶面
+                [0, 4], [1, 5], [2, 6], [3, 7]   # 侧面
+            ])
+
+            verts = calculate_cube_vertices(
+                transform=obj["location"],
+                rotation=obj["rotation"],
+                dimension=obj["dimensions"]
+            )
+
+            world_2_lidar = np.linalg.inv(lidar_2_world_map[frame_id])
+            bbox_vert_lidar = [point_transform_3d(vert, world_2_lidar) for vert in verts]
+            bbox_vert_lidar = np.array(bbox_vert_lidar)
+            
+            # 创建LineSet
+            line_set = o3d.geometry.LineSet()
+            line_set.points = o3d.utility.Vector3dVector(bbox_vert_lidar)
+            line_set.lines = o3d.utility.Vector2iVector(lines)
+
+            vis.add_geometry(line_set)
+        
+        if is_first_frame:
+            vis.add_geometry(pcd)
+            is_first_frame = False
+        else:
+            # vis.update_geometry(pcd)
+            vis.add_geometry(pcd)
+
+        vis.poll_events()
+        vis.update_renderer()
+
+        time.sleep(args.delay)
+    
+
+if __name__ == "__main__":
+    if args.frame:
+        visualize_frame(args.frame)
+    else:
+        visualize_sequence()
