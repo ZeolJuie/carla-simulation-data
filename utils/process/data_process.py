@@ -2,7 +2,9 @@ import sys
 sys.path.append('.')
 
 import json
+import csv
 import os
+import argparse
 
 import cv2
 import torch
@@ -19,8 +21,6 @@ from utils.geometry_utils import *
     可见4个以下 2
 """
 
-
-PRELIMINARY_FILTER_DISTANCE = 50
 
 
 def rgb_to_depth(depth_image):
@@ -233,6 +233,32 @@ def process_occlusion_by_lidar(sequence_dir):
     label_path = os.path.join(sequence_dir, "labels.json")
     with open(label_path, "r") as f:
         labels = json.load(f)
+
+    ego_path = f"{sequence_dir}/ego.csv"
+    calib_path = f"{sequence_dir}/calib.json"
+    with open(calib_path, "r") as f:
+        calib = json.load(f)
+    lidar_to_ego = np.array(calib["sensors"]["velodyne"]["extrinsic"]["matrix"])
+
+    lidar_2_world_map = dict()
+    with open(ego_path) as csvfile:
+        reader = csv.DictReader(csvfile)
+        for ego in reader:
+            ego_transform = carla.Transform(
+                location=carla.Location(
+                    float(ego['location_x']),
+                    float(ego['location_y']),
+                    float(ego['location_z'])
+                ),
+                rotation=carla.Rotation(
+                    roll=float(ego['rotation_roll']),
+                    pitch=float(ego['rotation_pitch']),
+                    yaw=float(ego['rotation_yaw'])
+                )
+            )
+
+            ego_to_world = ego_transform.get_matrix()
+            lidar_2_world_map[ego['frame']] = ego_to_world @ lidar_to_ego
     
     # 遍历所有帧
     for frame in tqdm(labels):
@@ -247,7 +273,7 @@ def process_occlusion_by_lidar(sequence_dir):
         pc_lidar = np.column_stack([points['x'], -points['y'], points['z']])
 
         # load lidar to world matrix
-        lidar_2_world = np.load(transform_matrix_path, allow_pickle=True)
+        lidar_2_world = lidar_2_world_map[frame["frame_id"]]
 
         # transform lidar to world coordinate
         N = pc_lidar.shape[0]
@@ -296,6 +322,12 @@ def generate_static_object_id(sequence_dir):
     for frame in labels:
         current_exist_ids = [obj['object_id'] for obj in frame['objects']]
         exist_ids.union(set(current_exist_ids))
+
+        # 去除Poles灯泡
+        frame['objects'] = [
+            obj for obj in frame['objects']
+            if not (obj['class'] == 'Poles' and float(obj["dimensions"][2]) < 0.5)
+        ]
         
         # 4. 遍历当前帧下所有ID = -1 （采集时标记的CityObject）的Object
         for obj in frame['objects']:
@@ -324,7 +356,12 @@ def generate_static_object_id(sequence_dir):
     
 # 运行处理
 if __name__ == "__main__":
-    sequence_dir = "carla_data/sequences/01"
+    PRELIMINARY_FILTER_DISTANCE = 50
+    parser = argparse.ArgumentParser(description="data process")
+    parser.add_argument("--sequence", type=str, help="sequence number to process")
+    args = parser.parse_args()
+
+    sequence_dir = f"carla_data/sequences/{args.sequence}"
     
     # 统计动态障碍物的点云覆盖数量
 
@@ -333,9 +370,8 @@ if __name__ == "__main__":
     # process_all_frame_occlusion(sequence_dir)
 
     # 使用雷达点数量，粗略判断遮挡
-    # process_occlusion_by_lidar(sequence_dir)
-
-    # 去除Poles灯泡
+    process_occlusion_by_lidar(sequence_dir)
+    
 
     # CityO物体分配instance id
     generate_static_object_id(sequence_dir)

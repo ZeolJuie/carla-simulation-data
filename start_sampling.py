@@ -140,8 +140,8 @@ def main(main_folder: str, args):
 
             # set start point and end point
             start_point = scenario.start_point
-            # end_point = scenario.end_point
-            end_point = world.get_random_location_from_navigation()
+            end_point = scenario.end_point
+            # end_point = world.get_random_location_from_navigation()
 
             try:
                 # generate walker

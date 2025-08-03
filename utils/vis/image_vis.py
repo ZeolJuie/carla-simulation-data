@@ -175,10 +175,17 @@ for image_file in image_files:
                 occlusion = obj["occlusion"]
                 object_id = str(obj["object_id"])
 
-                cv2.line(frame, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
-                cv2.line(frame, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
-                cv2.line(frame, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
-                cv2.line(frame, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                if not (isinstance(x_min, (int, float)) and isinstance(y_min, (int, float))):
+                    print("Invalid coordinates!")
+                    continue
+                try:
+                    cv2.line(frame, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
+                    cv2.line(frame, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                    cv2.line(frame, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
+                    cv2.line(frame, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                except Exception:
+                    print(x_max, x_min, y_max, y_min)
+                    continue
 
                 # 在边界框上方显示类别名称
                 cv2.putText(frame, class_name, (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
