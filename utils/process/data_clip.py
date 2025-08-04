@@ -51,6 +51,7 @@ def clip_sequence(start_frame, end_frame, input_sequence, output_sequence):
     for csv_file in csv_files:
         df = pd.read_csv(os.path.join(DATA_DIR, input_sequence, csv_file))
         result = df[(df['frame'] >= int(start_frame)) & (df['frame'] <= int(end_frame))]
+        result['frame'] = result['frame'].astype(str).str.zfill(6)
         result.to_csv(os.path.join(DATA_DIR, output_sequence, csv_file), index=False)
         print(f"{csv_file} clip done!")
         if csv_file == 'ego.csv':
