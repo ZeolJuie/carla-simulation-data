@@ -147,14 +147,6 @@ scenarios = [
     ),
 
     Scenario(
-        sequence_id = '11',
-        map_name = "Town02",
-        start_point = carla.Location(x=198, y=275, z=1.109136),
-        end_point = carla.Location(x=198, y=185, z=1.105408),
-        description = ""
-    ),
-
-    Scenario(
         sequence_id = '12',
         map_name = "Town02",
         start_point = carla.Location(x=198, y=295, z=1.109136),
@@ -175,6 +167,14 @@ scenarios = [
         map_name = "Town02",
         start_point = carla.Location(x=22, y=100, z=1.109136),
         end_point = carla.Location(x=198, y=185, z=1.105408),
+        description = "Manual controll, Urban, Turn Left"
+    ),
+
+    Scenario(
+        sequence_id = '15',
+        map_name = "Town02",
+        start_point = carla.Location(x=188.739441, y=228.695007, z=0.325664),
+        end_point = carla.Location(x=138.583954, y=215.680939, z=0.325664),
         description = "Manual controll, Urban, Turn Left"
     ),
 

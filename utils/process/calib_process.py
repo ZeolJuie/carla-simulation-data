@@ -11,7 +11,7 @@ import config
 
 
 root_path = "carla_data/sequences"
-sequence = "02"
+sequence = "16"
 
 calib_json = {
     "ego_pedestrian": "",

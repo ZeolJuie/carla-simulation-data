@@ -10,6 +10,8 @@ def zip_sequences_folder(base_path="carla_data/sequences"):
     # 遍历所有子文件夹
     for folder_name in os.listdir(base_path):
         folder_path = os.path.join(base_path, folder_name)
+        if folder_name not in ['01', '02']:
+            continue
         
         # 跳过非文件夹的文件
         if not os.path.isdir(folder_path):

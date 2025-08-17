@@ -63,7 +63,7 @@ def main(args):
 
             # set start point and end point
             start_point = scenario.start_point
-            end_point = scenario.end_points
+            end_point = scenario.end_point
 
             try:
                 # generate walker

@@ -137,6 +137,10 @@ nuScenes/
     python utils/process/data_zip.py
     ```
 
+## Data Format Conversion
+
+
+
 
 NOTICE
 - ego的rotation信息是角度制，labels中的rotation是弧度制

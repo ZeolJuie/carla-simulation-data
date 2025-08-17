@@ -5,6 +5,7 @@ import math
 import time
 import uuid
 import shutil
+from pathlib import Path
 from typing import Dict, List
 from collections import defaultdict
 
@@ -105,6 +106,10 @@ class CarlaToNuScenesConverter:
     
     def convert(self):
         """ excute scene data convert pipeline """
+
+        # 0.创建基础的文件夹结构
+        self._create_nuscenes_file_structure()
+
         # 以场景（序列）为单位转换数据 
 
         # 1.创建传感器，通常创建一次即可，且须读出
@@ -126,6 +131,144 @@ class CarlaToNuScenesConverter:
         self._create_instance()
 
         self._save_json_files()
+
+        
+    
+    def _create_nuscenes_file_structure(self):
+        # 定义NuScenes标准子目录结构
+        dirs = [
+            "samples",          # 传感器样本数据 (图像、点云等)
+            "sweeps",           # 连续扫描数据
+            "maps",             # 地图数据
+            "v1.0-trainval",    # 标注数据 (训练/验证)
+            "v1.0-test",        # 标注数据 (测试)
+            "v1.0-mini",        # 迷你版数据集
+        ]
+        
+        # 传感器子目录 (samples和sweeps下)
+        sensor_dirs = [
+            "CAM_BACK",
+            "CAM_BACK_LEFT",
+            "CAM_BACK_RIGHT",
+            "CAM_FRONT",
+            "CAM_FRONT_LEFT",
+            "CAM_FRONT_RIGHT",
+            "LIDAR_TOP",
+            "RADAR_BACK_LEFT",
+            "RADAR_BACK_RIGHT",
+            "RADAR_FRONT",
+            "RADAR_FRONT_LEFT",
+            "RADAR_FRONT_RIGHT",
+        ]
+
+        version_json_files = [
+            "attribute.json",
+            "map.json",
+            "visibility.json"
+        ]
+
+        
+        # 确保基础路径存在
+        base_path = Path(self.output_dir)
+        base_path.mkdir(parents=True, exist_ok=True)
+        
+        print(f"正在创建NuScenes文件结构在: {base_path}")
+        
+        # 创建主目录
+        for dir_name in dirs:
+            dir_path = base_path / dir_name
+            dir_path.mkdir(exist_ok=True)
+            print(f"创建目录: {dir_path}")
+            
+            # 为samples和sweeps创建传感器子目录
+            if dir_name in ["samples", "sweeps"]:
+                for sensor in sensor_dirs:
+                    sensor_path = dir_path / sensor
+                    sensor_path.mkdir(exist_ok=True)
+                    print(f"  创建传感器目录: {sensor_path}")
+        
+        for version in [
+            "v1.0-trainval",
+            "v1.0-test",
+            "v1.0-mini",
+        ]:
+            version_dir = os.path.join(self.output_dir, version)
+            # 创建一些必要的空文件
+            for json_file in version_json_files:
+                json_path = os.path.join(version_dir, json_file)
+                with open(json_path, 'w') as f:
+                    if json_file == 'visibility.json':
+                        visibility_data = [
+                            {
+                                "description": "visibility of whole object is 0",
+                                "token": "4",
+                                "level": "v0"
+                            },
+                            {
+                                "description": "visibility of whole object is between 0 and 40%",
+                                "token": "3",
+                                "level": "v0-40"
+                            },
+                            {
+                                "description": "visibility of whole object is between 40 and 60%",
+                                "token": "2",
+                                "level": "v40-60"
+                            },
+                            {
+                                "description": "visibility of whole object is between 60 and 80%",
+                                "token": "1",
+                                "level": "v60-80"
+                            },
+                            {
+                                "description": "visibility of whole object is between 80 and 100%",
+                                "token": "0",
+                                "level": "v80-100"
+                            }
+                        ]
+                        json.dump(visibility_data, f, indent=4)
+                    if json_file == 'map.json':
+                        map_data = [
+                            {
+                            "category": "semantic_prior",
+                            "token": "53992ee3023e5494b90c316c183be829",
+                            "filename": "maps/53992ee3023e5494b90c316c183be829.png",
+                            "log_tokens": [
+                                "0986cb758b1d43fdaa051ab23d45582b",
+                                "1c9b302455ff44a9a290c372b31aa3ce",
+                                "e60234ec7c324789ac7c8441a5e49731",
+                                "46123a03f41e4657adc82ed9ddbe0ba2",
+                                "a5bb7f9dd1884f1ea0de299caefe7ef4",
+                                "bc41a49366734ebf978d6a71981537dc",
+                                "f8699afb7a2247e38549e4d250b4581b",
+                                "d0450edaed4a46f898403f45fa9e5f0d",
+                                "f38ef5a1e9c941aabb2155768670b92a",
+                                "7e25a2c8ea1f41c5b0da1e69ecfa71a2",
+                                "ddc03471df3e4c9bb9663629a4097743",
+                                "31e9939f05c1485b88a8f68ad2cf9fa4",
+                                "783683d957054175bda1b326453a13f4",
+                                "343d984344e440c7952d1e403b572b2a",
+                                "92af2609d31445e5a71b2d895376fed6",
+                                "47620afea3c443f6a761e885273cb531",
+                                "d31dc715d1c34b99bd5afb0e3aea26ed",
+                                "34d0574ea8f340179c82162c6ac069bc",
+                                "d7fd2bb9696d43af901326664e42340b",
+                                "b5622d4dcb0d4549b813b3ffb96fbdc9",
+                                "da04ae0b72024818a6219d8dd138ea4b",
+                                "6b6513e6c8384cec88775cae30b78c0e",
+                                "eda311bda86f4e54857b0554639d6426",
+                                "cfe71bf0b5c54aed8f56d4feca9a7f59",
+                                "ee155e99938a4c2698fed50fc5b5d16a",
+                                "700b800c787842ba83493d9b2775234a"
+                                ]
+                            }
+                        ]
+                        json.dump(map_data, f, indent=4)
+                    pass  # just create an empty file
+                print(f"Created JSON file: {json_path}")
+            
+           
+        
+        print("NuScenes文件结构创建完成!")
 
     def _create_log(self):
         """ each sequence relates to a logfile """
@@ -224,7 +367,7 @@ class CarlaToNuScenesConverter:
         lidar_calib = {
             "token": generate_token(),
             "sensor_token": self.token_map['LIDAR_TOP'],
-            "translation": [0.2, -0, 0.7],
+            "translation": [0, -0, 1.0],
             "rotation": carla_quaternion_to_nuscenes(q_carla),
             "camera_intrinsic": []
         }
@@ -710,7 +853,7 @@ if __name__ == "__main__":
     converter = CarlaToNuScenesConverter(
         carla_root="./carla_data",
         nuscenes_output="./nuScenes",
-        sequence="02"
+        sequence="10"
     )
     converter.convert()
     print("Conversion completed!")
