@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # 将传感器的参数记录为更适合处理的内参外参(相对于自车)
 import os
 import json
@@ -11,7 +13,13 @@ import config
 
 
 root_path = "carla_data/sequences"
-sequence = "02"
+
+# 获取命令行参数（默认第一个是脚本名，第二个才是参数）
+if len(sys.argv) > 1:
+    sequence = sys.argv[1]  # 例如：python calib_process.py 20 → sequence = "20"
+else:
+    print("Please input sequence ID")
+    exit()
 
 calib_json = {
     "ego_pedestrian": "",

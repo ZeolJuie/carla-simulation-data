@@ -369,13 +369,14 @@ if __name__ == "__main__":
     # process_occlusion_by_lidar()
     # process_all_frame_occlusion(sequence_dir)
 
+    # CityO物体分配instance id
+    generate_static_object_id(sequence_dir)
+
     # 使用雷达点数量，粗略判断遮挡
     process_occlusion_by_lidar(sequence_dir)
     
 
-    # CityO物体分配instance id
-    generate_static_object_id(sequence_dir)
-
+    
 
     
 

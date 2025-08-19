@@ -81,10 +81,10 @@ def clip_sequence(start_frame, end_frame, input_sequence, output_sequence):
 
 if __name__ == '__main__':
 
-    start_frame = '021100'
-    end_frame = '021730'
+    start_frame = '075620'
+    end_frame = '077040'
 
-    input_sequence = '30'
-    output_sequence = '31'
+    input_sequence = '70'
+    output_sequence = '29'
 
     clip_sequence(start_frame, end_frame, input_sequence, output_sequence)

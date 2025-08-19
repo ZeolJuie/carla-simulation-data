@@ -143,7 +143,7 @@ def scene_diversity_statistic():
         statics_num = 0
 
         for frame in labels:
-            pedestrians = [obj for obj in frame["objects"] if obj["class"] == 'Pedestrian']
+            pedestrians = [obj for obj in frame["objects"] if obj["class"] == 'Pedestrian' and obj["occlusion"] == 0]
             pedestrians_num += len(pedestrians)
             vehicles = [obj for obj in frame["objects"] if obj["class"] in ['Car', 'Truck', 'Bus']]
             vehicles_num += len(vehicles)
