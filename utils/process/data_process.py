@@ -9,7 +9,7 @@ import argparse
 import cv2
 import torch
 from tqdm import tqdm
-from mmcv.ops.points_in_boxes import points_in_boxes_cpu 
+from mmcv.ops.points_in_boxes import points_in_boxes_cpu, points_in_boxes_all
 
 from utils.geometry_utils import *
 
@@ -366,8 +366,10 @@ if __name__ == "__main__":
     # 统计动态障碍物的点云覆盖数量
 
     # 使用深度相机信息，计算相机视角下的遮挡
-    # process_occlusion_by_lidar()
     # process_all_frame_occlusion(sequence_dir)
+
+    # CityO物体分配instance id
+    generate_static_object_id(sequence_dir)
 
     # CityO物体分配instance id
     generate_static_object_id(sequence_dir)
