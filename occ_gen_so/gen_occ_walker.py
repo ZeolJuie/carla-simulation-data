@@ -637,6 +637,11 @@ if __name__ == '__main__':
 
                 # to voxel coordinate
                 pcd_np = dense_voxels_with_semantic
+
+                pcd_np[:, 0] = np.clip(pcd_np[:, 0], 0, occ_size[0]-1)
+                pcd_np[:, 1] = np.clip(pcd_np[:, 1], 0, occ_size[1]-1)
+                pcd_np[:, 2] = np.clip(pcd_np[:, 2], 0, occ_size[2]-1)
+
                 pcd_np[:, 0] = (pcd_np[:, 0] - pc_range[0]) / voxel_size
                 pcd_np[:, 1] = (pcd_np[:, 1] - pc_range[1]) / voxel_size
                 pcd_np[:, 2] = (pcd_np[:, 2] - pc_range[2]) / voxel_size
