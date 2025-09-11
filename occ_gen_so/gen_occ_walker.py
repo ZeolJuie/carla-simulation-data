@@ -16,6 +16,293 @@ from scipy.spatial.transform import Rotation
 from copy import deepcopy
 from utils import preprocess, create_mesh_from_map, point_transform_3d_batch
 
+import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+camera_configs = [
+    {
+
+    # 'name': 'CAM_FRONT',
+
+    # 'transforms': {
+
+    #     'location': {'x': 0.20, 'y': 0, 'z': -0.30},
+
+    #     'rotation': {'pitch': 0, 'yaw': 0, 'roll': 0}
+
+    # },
+
+    # 'fov': 120,
+
+    # 'image_size': (1600, 900)
+
+    'name': 'CAM_FRONT',
+
+    'transforms': {
+
+    'location': {'x': 0.0, 'y': 0, 'z': -0.3},
+
+    'rotation': {'pitch': 0, 'yaw': 0, 'roll': 0}
+
+    },
+
+    'fov': 120,
+
+    'image_size': (1600, 900)
+
+    # },
+
+    # {
+
+    #     'name': 'CAM_FRONT_RIGHT',
+
+    #     'transforms': {
+
+    #         'location': {'x': -0.10, 'y': 0.15, 'z': -0.30},
+
+    #         'rotation': {'pitch': 0, 'yaw': 60, 'roll': 0}
+
+    #     },
+
+    #     'fov': 70,
+
+    #     'image_size': (1600, 900)
+
+    # },
+
+    # {
+
+    #     'name': 'CAM_FRONT_LEFT',
+
+    #     'transforms': {
+
+    #         'location': {'x': 0.10, 'y': -0.15, 'z': -0.30},
+
+    #         'rotation': {'pitch': 0, 'yaw': -60, 'roll': 0}
+
+    #     },
+
+    #     'fov': 70,
+
+    #     'image_size': (1600, 900)
+
+    # },
+
+    # {
+
+    #     'name': 'CAM_BACK',
+
+    #     'transforms': {
+
+    #         'location': {'x': -0.20, 'y': 0, 'z': -0.30},
+
+    #         'rotation': {'pitch': 0, 'yaw': 180, 'roll': 0}
+
+    #     },
+
+    #     'fov': 110,
+
+    #     'image_size': (1600, 900)
+
+    # },
+
+    # {
+
+    #     'name': 'CAM_BACK_RIGHT',
+
+    #     'transforms': {
+
+    #         'location': {'x': -0.10, 'y': 0.15, 'z': -0.30},
+
+    #         'rotation': {'pitch': 0, 'yaw': 120, 'roll': 0}
+
+    #     },
+
+    #     'fov': 70,
+
+    #     'image_size': (1600, 900)
+
+    # },
+
+    # {
+
+    #     'name': 'CAM_BACK_LEFT',
+
+    #     'transforms': {
+
+    #         'location': {'x': -0.10, 'y': -0.15, 'z': -0.30},
+
+    #         'rotation': {'pitch': 0, 'yaw': -120, 'roll': 0}
+
+    #     },
+
+    #     'fov': 70,
+
+    #     'image_size': (1600, 900)
+
+    }
+
+]
+
+def world_to_camera(point, cam_pose):
+
+    """将点从世界坐标系转换到相机坐标系"""
+
+    # 提取旋转和平移
+    R = cam_pose[:3, :3]
+    t = cam_pose[:3, 3]
+
+    # 转换到相机坐标系
+    point_cam = R.T @ (point - t)
+    return point_cam
+ 
+
+def bresenham_3d(start, end, pc_range=None, voxel_size=None):
+
+    """
+    严格修正的3D Bresenham算法：
+    1. 动态选择主步进轴（X/Y/Z中跨度最大的方向）
+    2. 处理所有边界条件（包括起点=终点的情况）
+    3. 返回np.ndarray类型的体素坐标数组
+    参数:
+    start: [x,y,z] 起点坐标（世界坐标系）
+    end: [x,y,z] 终点坐标（世界坐标系）
+    pc_range: 点云范围 [x_min, y_min, z_min, x_max, y_max, z_max]
+    voxel_size: 体素大小（单位：米）
+    返回:
+    np.ndarray: 射线穿过的体素坐标 [[x_idx, y_idx, z_idx], ...]
+    """
+
+    # === 1. 参数校验 ===
+    assert pc_range is not None and voxel_size is not None, "必须提供pc_range和voxel_size"
+
+    start = np.asarray(start, dtype=float)
+    end = np.asarray(end, dtype=float)
+
+    # === 2. 转换为体素网格坐标 ===
+    grid_min = np.array(pc_range[:3])
+    start_voxel = ((start - grid_min) / voxel_size).astype(int)
+    end_voxel = ((end - grid_min) / voxel_size).astype(int)
+
+    # === 3. 初始化Bresenham算法参数 ===
+    x0, y0, z0 = start_voxel
+    x1, y1, z1 = end_voxel
+    dx = abs(x1 - x0)
+    dy = abs(y1 - y0)
+    dz = abs(z1 - z0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    sz = 1 if z0 < z1 else -1
+    voxels = []
+
+    # === 4. 动态选择主步进轴 ===
+    if dx >= dy and dx >= dz:
+        # X轴为主步进轴
+        err1 = 2 * dy - dx
+        err2 = 2 * dz - dx
+
+        for _ in range(dx + 1):
+            voxels.append([x0, y0, z0])
+            if x0 == x1:
+                break
+
+            if err1 > 0:
+                y0 += sy
+                err1 -= 2 * dx
+
+            if err2 > 0:
+                z0 += sz
+                err2 -= 2 * dx
+
+            err1 += 2 * dy
+            err2 += 2 * dz
+            x0 += sx
+
+    elif dy >= dx and dy >= dz:
+
+        # Y轴为主步进轴
+        err1 = 2 * dx - dy
+        err2 = 2 * dz - dy
+        for _ in range(dy + 1):
+            voxels.append([x0, y0, z0])
+            if y0 == y1:
+                break
+
+            if err1 > 0:
+                x0 += sx
+                err1 -= 2 * dy
+
+            if err2 > 0:
+                z0 += sz
+                err2 -= 2 * dy
+
+            err1 += 2 * dx
+            err2 += 2 * dz
+            y0 += sy
+
+    else:
+
+        # Z轴为主步进轴
+        err1 = 2 * dy - dz
+        err2 = 2 * dx - dz
+        for _ in range(dz + 1):
+            voxels.append([x0, y0, z0])
+            if z0 == z1:
+                break
+
+            if err1 > 0:
+                y0 += sy
+                err1 -= 2 * dz
+
+            if err2 > 0:
+                x0 += sx
+                err2 -= 2 * dz
+
+            err1 += 2 * dy
+            err2 += 2 * dx
+            z0 += sz
+
+    # === 5. 返回结果 ===
+    return np.array(voxels, dtype=int)
+
+def compute_camera_visibility_mask(
+    occupied_voxels, camera_poses, camera_configs,
+    pc_range, voxel_size, grid_shape
+):
+
+    """改进的相机可见性计算"""
+
+    mask = np.zeros(grid_shape, dtype=np.int8)
+    occupied_voxels_set = {tuple(v) for v in occupied_voxels}
+
+    for cam_pose, cam_config in zip(camera_poses, camera_configs):
+
+        cam_center = cam_pose[:3, 3]
+
+        for voxel in occupied_voxels:
+            voxel_center = (voxel + 0.5) * voxel_size + pc_range[:3]
+
+            # 进行射线追踪
+            ray_voxels = bresenham_3d(cam_center, voxel_center, pc_range, voxel_size)
+
+            for v in ray_voxels:
+                v_tuple = tuple(v)
+
+                # 检查体素是否在网格范围内
+                if not (0 <= v[0] < grid_shape[0] and
+                        0 <= v[1] < grid_shape[1] and
+                        0 <= v[2] < grid_shape[2]):
+                    continue
+
+                # 标记为可见
+                mask[v_tuple] = 1
+
+                # 如果是被占用体素，终止射线
+                if v_tuple in occupied_voxels_set:
+                    break
+
+    return mask
 
 def point_transform_3d(loc, M):
     """ 
@@ -307,6 +594,18 @@ if __name__ == '__main__':
             ego_to_world = ego_transform.get_matrix()
             lidar_2_world_map[ego['frame']] = ego_to_world @ lidar_to_ego
 
+    camera_poses = []
+    for cam_cfg in camera_configs:
+        cam_pose = get_extrinsic_matrix(
+            x=cam_cfg['transforms']['location']['x'],
+            y=-cam_cfg['transforms']['location']['y'],
+            z=cam_cfg['transforms']['location']['z'],
+            roll=np.deg2rad(cam_cfg['transforms']['rotation']['roll']),
+            pitch=np.deg2rad(cam_cfg['transforms']['rotation']['pitch']),
+            yaw=np.deg2rad(-cam_cfg['transforms']['rotation']['yaw']-90)
+        )
+    camera_poses.append(cam_pose)
+
 
     while i < all_sample_number:
         name_i = os.path.basename(pc_seman_pathes[i]).split('.')[0] 
@@ -552,6 +851,7 @@ if __name__ == '__main__':
                         points[:, :3] = rotated_object_points + locs[k] 
                     
                         if points.shape[0] >= 5:
+                            # TODO: 这段代码是否有效
                             points_in_boxes = points_in_boxes_cpu(torch.from_numpy(points[:, :3][np.newaxis, :, :]), torch.from_numpy(gt_bbox_3d[k:k+1][np.newaxis, :]))
                             points = points[points_in_boxes[0, :, 0].bool()]  
                  
@@ -631,7 +931,8 @@ if __name__ == '__main__':
     
                 d1, d2, idx1, idx2 = chamfer.forward(x, y)
                 indices = idx1[0].cpu().numpy()
- 
+
+
                 dense_semantic = sparse_voxels_semantic[:, 3][np.array(indices)]
                 dense_voxels_with_semantic = np.concatenate([fov_voxels, dense_semantic[:, np.newaxis]], axis=1)
 
@@ -654,6 +955,12 @@ if __name__ == '__main__':
                 semantics[pcd_np[:, 0], pcd_np[:, 1], pcd_np[:, 2]] = pcd_np[:, 3]  
                 semantics = np.flip(semantics, axis=1).astype(np.int8) # coordinate: carla to nuscenes
                 mask_camera = np.ones(occ_size).astype(np.int8) 
+                
+                occupied_voxels = np.argwhere(semantics != 0)
+                mask_camera = compute_camera_visibility_mask(
+                    occupied_voxels, camera_poses, camera_configs, pc_range, voxel_size, occ_size
+                )
+
                 mask_lidar = np.ones(occ_size).astype(np.int8)
                 occ_out_dir = os.path.join(out_path, f'sample_{name}')
                 dict_npz = {"semantics": semantics,  "mask_camera": mask_camera, "mask_lidar": mask_lidar}

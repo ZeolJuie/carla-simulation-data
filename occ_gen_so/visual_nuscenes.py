@@ -11,7 +11,7 @@ import numpy as np
 
 from carla_sync.globals import get_global
 
-FREE_LABEL = 17
+FREE_LABEL = 10
 VOXEL_SIZE = 0.2
 POINT_CLOUD_RANGE = [-40, -40, -3]
 
@@ -31,25 +31,25 @@ color_map = {
         7: (250, 170, 30),  # TrafficLight
         8: (220, 220, 0),   # TrafficSign
         9: (107, 142, 35),  # Vegetation
-        10: (152, 251, 152),# Terrain
-        11: (70, 130, 180), # Sky
-        12: (220, 20, 60),  # Pedestrian
-        13: (255, 0, 0),    # Rider
-        14: (0, 0, 142),    # Car
-        15: (0, 0, 70),     # Truck
-        16: (0, 60, 100),   # Bus
-        17: (0, 80, 100),   # Train
-        18: (0, 0, 230),    # Motorcycle
-        19: (119, 11, 32),  # Bicycle
-        20: (110, 190, 160),# Static
-        21: (170, 120, 50), # Dynamic
-        22: (55, 90, 80),   # Other
-        23: (45, 60, 150),  # Water
-        24: (157, 234, 50), # RoadLine
-        25: (81, 0, 81),    # Ground
-        26: (150, 100, 100),# Bridge
-        27: (230, 150, 140),# RailTrack
-        28: (180, 165, 180) # GuardRail
+        # 10: (152, 251, 152),# Terrain
+        # 11: (70, 130, 180), # Sky
+        # 12: (220, 20, 60),  # Pedestrian
+        # 13: (255, 0, 0),    # Rider
+        # 14: (0, 0, 142),    # Car
+        # 15: (0, 0, 70),     # Truck
+        # 16: (0, 60, 100),   # Bus
+        # 17: (0, 80, 100),   # Train
+        # 18: (0, 0, 230),    # Motorcycle
+        # 19: (119, 11, 32),  # Bicycle
+        # 20: (110, 190, 160),# Static
+        # 21: (170, 120, 50), # Dynamic
+        # 22: (55, 90, 80),   # Other
+        # 23: (45, 60, 150),  # Water
+        # 24: (157, 234, 50), # RoadLine
+        # 25: (81, 0, 81),    # Ground
+        # 26: (150, 100, 100),# Bridge
+        # 27: (230, 150, 140),# RailTrack
+        # 28: (180, 165, 180) # GuardRail
     }
  
 colors_nuscenes = np.array(
@@ -82,7 +82,7 @@ def occ_show(pred_occ, mask_camera = None, data_type = 'nuscenes'):
         colors = colors_nuscenes
     elif data_type == 'carla':
         vmax = 24
-        free_label = 25
+        free_label = 10
         colors = LABEL_COLORS
         
 
@@ -124,11 +124,11 @@ if __name__=="__main__":
     # pred_occ_path = "/mnt/ws-data/data/data/nuscenes/mini/gts/scene-0103/3e8750f331d7499e9b5123e9eb70f2e2/labels.npz"
     # pred_occ_path = "/home/zhoumohan/codes/carla-simulation-data/carla_data/sequences/08/occ/sample_313330/labels.npz"
     pred_occ_path = "/home/zhoumohan/codes/carla-simulation-data/carla_data/sequences/01/occ/sample_061000/labels.npz"  # 替换为你的序列目录
-    pred_occ = np.load(pred_occ_path, allow_pickle=True)['semantics']
+    # pred_occ = np.load(pred_occ_path, allow_pickle=True)['semantics']
     
     # occ_show(pred_occ, data_type='carla')
-    path_pattern = "/home/zhoumohan/codes/carla-simulation-data/carla_data/sequences/01/occ/sample_*/labels.npz"
-
+    path_pattern = "/home/zmh/codes/carla-simulation-data/nuscenes_carla/gts/scene-0024/sample_*/labels.npz"
+    # path_pattern = "/home/zmh/codes/FlashOCC/flashocc-r50-M0/results/scene-0020/*/pred.npz"
     # 获取所有匹配的文件路径
     file_paths = sorted(glob.glob(path_pattern))
 

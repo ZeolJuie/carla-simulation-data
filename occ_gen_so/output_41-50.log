@@ -1,0 +1,184 @@
+nohup: 忽略输入
+正在处理序列 41 -> scene-0041
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/134
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 68.4998071193695s
+process: 36/134
+left_side: 36, right_side: 76
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 61.7751784324646s
+process: 72/134
+left_side: 72, right_side: 134
+cloud merging done!
+left_side_gen: 0, right_side_gen: 62
+iter cost: 189.76935458183289s
+序列 41 处理完成
+正在处理序列 42 -> scene-0042
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/171
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 81.23769068717957s
+process: 36/171
+left_side: 36, right_side: 76
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 67.12752079963684s
+process: 72/171
+left_side: 72, right_side: 112
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 70.74136400222778s
+process: 108/171
+left_side: 108, right_side: 171
+cloud merging done!
+left_side_gen: 0, right_side_gen: 63
+iter cost: 137.74468159675598s
+序列 42 处理完成
+正在处理序列 43 -> scene-0043
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/150
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 75.36252617835999s
+process: 36/150
+left_side: 36, right_side: 76
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 51.815186500549316s
+process: 72/150
+left_side: 72, right_side: 112
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 66.61008286476135s
+process: 108/150
+left_side: 108, right_side: 150
+cloud merging done!
+left_side_gen: 0, right_side_gen: 42
+iter cost: 94.87478518486023s
+序列 43 处理完成
+正在处理序列 44 -> scene-0044
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/81
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 80.44506406784058s
+process: 36/81
+left_side: 36, right_side: 81
+cloud merging done!
+left_side_gen: 0, right_side_gen: 45
+iter cost: 98.2602128982544s
+序列 44 处理完成
+正在处理序列 45 -> scene-0045
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/194
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 92.82338500022888s
+process: 36/194
+left_side: 36, right_side: 76
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 77.42840600013733s
+process: 72/194
+left_side: 72, right_side: 112
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 74.66248297691345s
+process: 108/194
+left_side: 108, right_side: 148
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 73.80029559135437s
+process: 144/194
+left_side: 144, right_side: 194
+cloud merging done!
+left_side_gen: 0, right_side_gen: 50
+iter cost: 115.02700686454773s
+序列 45 处理完成
+正在处理序列 46 -> scene-0046
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/107
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 74.06681442260742s
+process: 36/107
+left_side: 36, right_side: 107
+cloud merging done!
+left_side_gen: 0, right_side_gen: 71
+iter cost: 158.29444432258606s
+序列 46 处理完成
+正在处理序列 47 -> scene-0047
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/147
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 82.21576857566833s
+process: 36/147
+left_side: 36, right_side: 76
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 60.758559703826904s
+process: 72/147
+left_side: 72, right_side: 147
+cloud merging done!
+left_side_gen: 0, right_side_gen: 75
+iter cost: 161.1017165184021s
+序列 47 处理完成
+正在处理序列 48 -> scene-0048
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/58
+left_side: 0, right_side: 58
+cloud merging done!
+left_side_gen: 0, right_side_gen: 58
+iter cost: 94.4756371974945s
+序列 48 处理完成
+正在处理序列 49 -> scene-0049
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/87
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 61.6720016002655s
+process: 36/87
+left_side: 36, right_side: 87
+cloud merging done!
+left_side_gen: 0, right_side_gen: 51
+iter cost: 80.8170268535614s
+序列 49 处理完成
+正在处理序列 50 -> scene-0050
+/home/zmh/miniconda3/envs/openmmlab/lib/python3.8/site-packages/mmengine/model/utils.py:137: UserWarning: Cannot import torch.fx, `merge_dict` is a simple function to merge multiple dicts
+  warnings.warn('Cannot import torch.fx, `merge_dict` is a simple function '
+process: 0/98
+left_side: 0, right_side: 40
+cloud merging done!
+left_side_gen: 0, right_side_gen: 36
+iter cost: 48.73938298225403s
+process: 36/98
+left_side: 36, right_side: 98
+cloud merging done!
+left_side_gen: 0, right_side_gen: 62
+Traceback (most recent call last):
+  File "gen_occ_walker.py", line 651, in <module>
+    semantics[pcd_np[:, 0], pcd_np[:, 1], pcd_np[:, 2]] = pcd_np[:, 3]  
+IndexError: index 200 is out of bounds for axis 0 with size 200
+错误: 序列 50 处理失败
