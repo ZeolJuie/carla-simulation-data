@@ -18,6 +18,39 @@ camera_configs = [
 
 ]
 
+
+mapping_carla_to_nuscenes = {
+    0: 10,   # Unlabeled -> Free
+    1: 0,    # Roads -> Road
+    2: 1,    # SideWalks -> Sidewalk
+    3: 2,    # Building -> Building
+    4: 2,    # Wall -> Building
+    5: 8,    # Fence -> Obstacle
+    6: 3,    # Pole -> Pole
+    7: 3,    # TrafficLight -> Traffic Element
+    8: 3,    # TrafficSign -> Traffic Element
+    9: 4,    # Vegetation -> Vegetation
+    10: 4,   # Terrain -> Vegetation
+    11: 10,  # Sky -> Free
+    12: 5,   # Pedestrian -> Human
+    13: 5,   # Rider -> Human
+    14: 7,   # Car -> Vehicle
+    15: 7,   # Truck -> Vehicle
+    16: 7,   # Bus -> Vehicle
+    17: 7,   # Train -> Vehicle
+    18: 6,   # Motorcycle -> Vehicle
+    19: 6,   # Bicycle -> Vehicle
+    20: 8,   # Static -> Obstacle
+    21: 8,   # Dynamic -> Obstacle
+    22: 8,   # Other -> Obstacle
+    23: 10,  # Water -> Void
+    24: 0,   # RoadLine -> Road
+    25: 9,   # Ground -> Ground
+    26: 2,   # Bridge -> Building
+    27: 10,  # RailTrack -> Void
+    28: 3    # GuardRail -> Pole
+}
+
 def world_to_camera(point, cam_pose):
 
     """将点从世界坐标系转换到相机坐标系"""
@@ -227,7 +260,7 @@ for cam_cfg in camera_configs:
     )
 camera_poses.append(cam_pose)
 
-sequences = [os.path.join("/home/zmh/codes/carla-simulation-data/nuscenes_carla/gts", f"scene-{i+1:04d}") for i in range(0, 10)]
+sequences = [os.path.join("/home/zmh/codes/carla-simulation-data/nuscenes_carla/gts", f"scene-{i+1:04d}") for i in range(0, 100)]
 
 # sequences = [os.path.join("/home/zmh/codes/FlashOCC/data/nuscenes/gts", f"scene-{i+1:04d}") for i in range(0, 10)]
 
@@ -241,10 +274,16 @@ for s in sequences:
         mask_camera = labels['mask_camera']
         mask_lidar = labels['mask_lidar']
         occupied_voxels = np.argwhere(semantics != 0)
-        breakpoint()
+        
         mask_camera = compute_camera_visibility_mask(
             occupied_voxels, camera_poses, camera_configs, pc_range, voxel_size, occ_size
         )
+
+        # 保留所有的pedestrian, vehicle等小物体
+        obj_occ_class = [5, 6, 7, 8, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+        obj_occ_index = np.isin(semantics, obj_occ_class).astype(int)
+        
+        mask_camera = obj_occ_index | mask_camera
 
         dict_npz = {"semantics": semantics,  "mask_camera": mask_camera, "mask_lidar": mask_lidar}
         np.savez(os.path.join(occ_file), **dict_npz)
