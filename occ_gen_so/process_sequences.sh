@@ -8,13 +8,13 @@ OUTPUT_BASE_PATH="/home/zmh/codes/carla-simulation-data/nuscenes_carla/gts"
 mkdir -p "$OUTPUT_BASE_PATH"
 
 # 要处理的序列列表（可以根据实际情况修改）
-SEQUENCES=({01..10})
+SEQUENCES=({131..164})
 
 # 遍历所有序列并执行命令
 for seq in "${SEQUENCES[@]}"; do
     # 格式化序列号为4位数（scene-0001, scene-0002等）
     seq_num=$(printf "%04d" "$((10#$seq))")
-    
+0
     # 构造完整路径
     data_path="${BASE_DATA_PATH}/${seq}"
     out_path="${OUTPUT_BASE_PATH}/scene-${seq_num}"

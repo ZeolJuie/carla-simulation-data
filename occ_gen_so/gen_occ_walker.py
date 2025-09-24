@@ -956,10 +956,10 @@ if __name__ == '__main__':
                 semantics = np.flip(semantics, axis=1).astype(np.int8) # coordinate: carla to nuscenes
                 mask_camera = np.ones(occ_size).astype(np.int8) 
                 
-                occupied_voxels = np.argwhere(semantics != 0)
-                mask_camera = compute_camera_visibility_mask(
-                    occupied_voxels, camera_poses, camera_configs, pc_range, voxel_size, occ_size
-                )
+                # occupied_voxels = np.argwhere(semantics != 0)
+                # mask_camera = compute_camera_visibility_mask(
+                #     occupied_voxels, camera_poses, camera_configs, pc_range, voxel_size, occ_size
+                # )
 
                 mask_lidar = np.ones(occ_size).astype(np.int8)
                 occ_out_dir = os.path.join(out_path, f'sample_{name}')
