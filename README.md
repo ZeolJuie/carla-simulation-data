@@ -28,7 +28,7 @@ navigate independently and realistically in an urban environment were added.
    ```sh
    pip install -r requirements.txt
    ```
-5. Add `<path-to-carla-installation>/carla-simulator/PythonAPI/carla` to your PYTHONPATH
+5. Add `<path-to-carla-installation>/carla-simulator/dang` to your PYTHONPATH
 
 ## Usage
 1. Start CARLA server with:
@@ -41,6 +41,12 @@ navigate independently and realistically in an urban environment were added.
    ```
 
 ## Configuration
+
+语义场景到最终配置的受控生成约束见：
+
+- [SCENE_SEMANTIC_REGISTRY.md](/home/zmh/carla-social-force-model/SCENE_SEMANTIC_REGISTRY.md)
+- [SCENE_TOPOLOGY_PIPELINE.md](/home/zmh/carla-social-force-model/SCENE_TOPOLOGY_PIPELINE.md)
+- [docs/scene_route_behavior_reference.md](/home/zmh/carla-social-force-model/docs/scene_route_behavior_reference.md)
 
 ### SFM configuration
 
@@ -119,14 +125,39 @@ step_length = 0.05        # length [s] of one simulation step (default = 0.05)
 [map]
 map_name = 'Town10HD_Opt'                 # CARLA map name
 map_path = 'Carla/Maps/'                  # path to CARLA map from CarlaUE4/Content
+carla_timeout = 30.0                      # optional CARLA RPC timeout [s] for slow map loading
+scene_id = 'crossing_002'                 # optional candidate scene id from walkable_cells.json
+scene_catalog_path = 'artifacts/Town10HD_Opt/topology/walkable_cells.json'  # optional override
 draw_obstacles = false                    # draw (obstacle) border points (default = false)
 unload_props = false                      # unload props like trees, benches etc. (default = false)
 spectator_location = [75, 171.9, 10.0]    # location of spectator camera [x,y,z]
 spectator_rotation = [-40.0, 0.0, 0.0]    # rotation of spectator camera [pitch,yaw,roll]
 
+# stochastic weather generator
+[weather]
+enabled = true                            # apply generated weather (default = true when [weather] exists)
+seed = 2020                               # optional generator seed; defaults to walker.pedestrian_seed
+
+[weather.sun_altitude]
+weights = { day = 0.55, low_sun = 0.15, twilight = 0.15, night = 0.15 }
+
+[weather.cloudiness]
+weights = { clear = 0.20, mid = 0.50, overcast = 0.30 }
+
+[weather.precipitation]
+# rain is sampled conditionally on cloudiness, while wetness / deposits / wind are derived from the sampled
+# cloudiness and precipitation values. Fog is generated as either no fog or light fog.
+
+[sampling]
+enabled = true                            # enable sequence-style sampling and archiving
+sensor_rig = 'config/sensors/default_multimodal.toml'
+policy = 'config/sampling/default.toml'
+sequence_id = 'auto'                      # optional; defaults to timestamp-scenario_name
+
 # general pedestrian configurations
 [walker]
 pedestrian_seed = 2020      # random seed for all random operations regarding pedestrians (default = 2000)
+default_speed = 1.2         # default base walking speed [m/s] used by behavior profiles (default = 1.2)
 despawn_on_arrival = true   # despawn pedestrians on arrival (default = false)
 waypoint_threshold = 1      # threshold [m] how close pedestrians have to get to a waypoint to consider them arrived
                             # (default = 2.0)
@@ -152,6 +183,73 @@ spawn_interval = 2.8                    # time interval [s] between spawning of 
 crossing_speed_factor = 1               # factor how the target speed changes when crossing a road [m/s] (default = 1.5)
 crossing_safety_margin = 1              # safety margin [s] for gap acceptance model before crossing (default = 1.5)
 
+# pedestrian blueprint notes:
+# - any live CARLA `walker.pedestrian.*` blueprint id is supported here
+# - group / formation spawners currently share one blueprint per spawner
+# - see SCENE_SEMANTIC_REGISTRY.md for verified examples and current constraints
+
+# scene-based pedestrian spawner
+[[walker.ped_spawner]]
+behavior = 'normal_cross'               # required for scene-based route selection
+route_type = 'crosswalk_cross'          # optional route type filter inside the selected scene
+# route_id = 'crossing_002/route_01'    # optional exact route override inside the selected scene
+# scene_id = 'crossing_002'             # optional per-ped override, otherwise map.scene_id is used
+base_speed = 1.2                        # optional base speed before behavior speed multiplier is applied
+quantity = 1
+spawn_time = 0.0
+spawn_interval = 2.0
+# speed / crossing_speed_factor / crossing_safety_margin still work and override behavior defaults if set
+
+# behavior mode resolves scene_id from walker.ped_spawner.scene_id or map.scene_id,
+# then randomly picks one catalog route whose supported_behaviors contains the configured behavior
+# and uses the route's spawn_location + config_waypoints + config_crossing_road_bools
+
+# scene-based pedestrian group with a shared route and a fixed spawn formation
+[[walker.ped_spawner]]
+behavior = 'normal_cross'
+route_id = 'crossing_002/route_01'      # required when formation is used so all members share one route
+formation = 'abreast'                   # supported: 'abreast', 'follow'
+formation_spacing = 0.6                 # optional slot spacing in meters
+quantity = 2                            # only 2 or 3 are supported for formation groups
+ego = true                              # optional explicit ego declaration for sampling
+ego_member_index = 0                    # required when ego=true and quantity > 1
+spawn_time = 0.0
+spawn_interval = 0.15                   # keep members close in time; defaults to 0.15 when formation is set
+
+# formation only affects scene-based spawn geometry. Members still use the existing per-pedestrian
+# SFM, route follower and traffic checking logic at runtime.
+
+# generated weather is written to weather.json next to pedestrian.csv / vehicle.csv when csv output is enabled.
+# if sampling.enabled=true, the run is additionally archived into a sequence-style directory:
+#
+# artifacts/sequences/<sequence_id>/
+#   manifest.json
+#   config/
+#     scenario.toml
+#     sensor_rig.toml
+#     sampling_policy.toml
+#     sampling_resolved.json
+#   simulation/
+#     pedestrian.csv
+#     vehicle.csv
+#     borders.csv
+#     obstacles.csv
+#     weather.json
+#     ego_selection.json
+#     run_summary.json
+#   visualization/
+#     pedestrian_bev_group.svg
+#   sampling/
+#     image/
+#     depth/
+#     semantic/
+#     velodyne/
+#     velodyne_semantic/
+#     radar/
+#     imu/
+#     gnss/
+#     velodyne_calib/
+
 
 # general vehicle configurations
 [vehicle]
@@ -174,6 +272,10 @@ spawn_time = 0.0                    # spawn time [s] of first vehicle spawning w
 spawn_interval = 5.0                # time interval [s] between spawning of vehicles (default = 5.0)
 ignore_lights_percentage = 100      # percentage of traffic lights the vehicle should ignore (default = 0.0)
 ignore_walkers_percentage = 0       # percentage of pedestrians the vehicle should ignore (default = 0.0)
+
+# vehicle blueprint notes:
+# - any live CARLA `vehicle.*` blueprint id is supported here
+# - see SCENE_SEMANTIC_REGISTRY.md for the verified local candidate list
 
 
 # general obstacle configurations

@@ -16,7 +16,7 @@ class PedState:
 
         self.ped_state_dtype = [('name', 'U8'), ('id', 'i4'), ('loc', 'f8', (3,)), ('vel', 'f8', (3,)),
                                 ('next_waypoint', 'f8', (3,)), ('mode', 'O'), ('radius', 'f8'),
-                                ('target_speed', 'f8')]
+                                ('target_speed', 'f8'), ('group_id', 'i4'), ('group_member_index', 'i4')]
 
         self.state = None
 
@@ -69,6 +69,12 @@ class PedState:
     def target_speed(self):
         return self.state['target_speed']
 
+    def group_id(self):
+        return self.state['group_id']
+
+    def group_member_index(self):
+        return self.state['group_member_index']
+
     def max_speed(self):
         return self.target_speed() * self.max_speed_factor
 
@@ -80,16 +86,24 @@ class PedState:
         self.state['loc'][self.state['id'] == walker_id] = location
         self.state['vel'][self.state['id'] == walker_id] = velocity
 
-    def update_next_waypoint(self, ped_name, next_waypoint_tuple):
-        next_waypoint, crossing_road = next_waypoint_tuple
-        self.state['next_waypoint'][self.state['name'] == ped_name] = next_waypoint
+    def set_next_waypoint(self, ped_name, next_waypoint):
+        self.state['next_waypoint'][self.state['name'] == ped_name] = np.array(next_waypoint, dtype=float)
+
+    def update_navigation_target(self, ped_name, next_waypoint, crossing_road):
+        self.set_next_waypoint(ped_name, next_waypoint)
+        ped_mode_manager = self.state['mode'][self.state['name'] == ped_name][0]
+        current_mode = ped_mode_manager.current_mode
 
         if crossing_road:
-            ped_mode = PedMode.CROSSING_ROAD
+            if current_mode == PedMode.WALKING_SIDEWALK:
+                ped_mode_manager.set_mode(PedMode.CROSSING_ROAD)
         else:
-            ped_mode = PedMode.WALKING_SIDEWALK
+            if current_mode in [PedMode.CROSSING_ROAD, PedMode.ROAD_TO_SIDEWALK, PedMode.CHECKING_TRAFFIC]:
+                ped_mode_manager.set_mode(PedMode.WALKING_SIDEWALK)
 
-        self.state['mode'][self.state['name'] == ped_name][0].set_mode(ped_mode)
+    def update_next_waypoint(self, ped_name, next_waypoint_tuple):
+        next_waypoint, crossing_road = next_waypoint_tuple
+        self.update_navigation_target(ped_name, next_waypoint, crossing_road)
 
     def apply_current_mode(self):
         self.state['target_speed'] = [mode.target_speed for mode in self.state['mode']]
@@ -105,4 +119,3 @@ class PedState:
 
     def get_all_states(self):
         return self.all_states
-

@@ -127,9 +127,12 @@ class BorderForce(Force):
     def __init__(self, step_length, sfm_config, borders, section_info):
         super().__init__(step_length, sfm_config)
         self.borders = borders
-        section_info = np.array(section_info)
-        self.section_center = np.vstack(section_info[:, 0])
-        self.section_length = section_info[:, 1]
+        if section_info:
+            self.section_center = np.vstack([section[0] for section in section_info])
+            self.section_length = np.array([section[1] for section in section_info], dtype=float)
+        else:
+            self.section_center = np.empty((0, 2))
+            self.section_length = np.empty((0,), dtype=float)
 
         self.border_force_config = self.sfm_config['border_force']
         self.a = self.border_force_config.get('a', 3.0)
@@ -175,6 +178,53 @@ class BorderForce(Force):
         # deactivate border force for pedestrians that are crossing the road
         crossing_road = [m.current_mode in [PedMode.CROSSING_ROAD, PedMode.ROAD_TO_SIDEWALK] for m in peds.mode()]
         force[crossing_road] *= 0
+
+        return force
+
+
+class SceneRouteForce(Force):
+    """
+    Applies a lateral correction towards the current scene-route centerline during crossing.
+    This keeps pedestrians close to the selected route without replacing the existing goal force.
+    """
+
+    def __init__(self, step_length, sfm_config, route_guidance_dict):
+        super().__init__(step_length, sfm_config)
+        self.route_guidance_dict = route_guidance_dict
+        force_config = self.sfm_config.get('scene_route_force', {})
+        self.k = force_config.get('k', 1.75)
+        self.damping = force_config.get('damping', 0.65)
+        self.activation_distance = force_config.get('activation_distance', 8.0)
+
+    def _get_force(self, peds):
+        if not self.route_guidance_dict:
+            return np.zeros((peds.size(), 3))
+
+        force = np.zeros((peds.size(), 3))
+        for index, ped in enumerate(peds.state):
+            guidance = self.route_guidance_dict.get(ped['name'])
+            if guidance is None or not guidance.get('active', False):
+                continue
+
+            route_point = np.array(guidance['route_point'], dtype=float)
+            route_tangent = np.array(guidance['route_tangent'], dtype=float)
+
+            tangent_xy = route_tangent[:2]
+            tangent_norm = float(np.linalg.norm(tangent_xy))
+            if tangent_norm <= 1e-6:
+                continue
+            tangent_xy = tangent_xy / tangent_norm
+
+            offset_xy = route_point[:2] - ped['loc'][:2]
+            tangent_component = tangent_xy * np.dot(offset_xy, tangent_xy)
+            lateral_offset = offset_xy - tangent_component
+            lateral_distance = float(np.linalg.norm(lateral_offset))
+            if lateral_distance > self.activation_distance:
+                lateral_offset = lateral_offset / lateral_distance * self.activation_distance
+
+            lateral_velocity = ped['vel'][:2] - tangent_xy * np.dot(ped['vel'][:2], tangent_xy)
+            corrective_xy = self.k * lateral_offset - self.damping * lateral_velocity
+            force[index, :2] = corrective_xy
 
         return force
 

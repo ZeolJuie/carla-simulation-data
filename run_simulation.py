@@ -11,6 +11,7 @@ from obstacles import extract_sidewalk, extract_obstacles, get_dynamic_obstacles
 from output_generator import OutputGenerator
 from pedestrian_simulation import PedestrianSimulation
 from pedestrian_spawner import PedSpawnManager
+from sampling import load_sampling_setup, SamplingCollector, SamplingSequenceManager
 from vehicle_spawner import VehicleSpawnManager
 
 
@@ -21,16 +22,19 @@ class SimulationRunner:
     """
 
     def __init__(self, pedestrian_simulation, carla_simulation, ped_spawn_manager, vehicle_spawn_manager,
-                 scenario_config, args):
+                 scenario_config, args, sequence_manager=None, sampling_collector=None):
 
         self.ped_sim = pedestrian_simulation
         self.carla_sim = carla_simulation
         self.ped_spawn_manager = ped_spawn_manager
         self.vehicle_spawn_manager = vehicle_spawn_manager
         self.scenario_config = scenario_config
+        self.sequence_manager = sequence_manager
+        self.sampling_collector = sampling_collector
 
         self.output_csv = args.csv
         self.output_path = args.output
+        self.duration = args.duration
         self.step_length = scenario_config.get('step_length', {0.05})
 
         walker_config = scenario_config.get('walker', {})
@@ -40,9 +44,90 @@ class SimulationRunner:
 
         self.walker_dict = ped_spawn_manager.walker_dict
         self.waypoint_dict = ped_spawn_manager.waypoint_dict
+        self.scene_route_dict = ped_spawn_manager.scene_route_dict
         self.vehicle_list = vehicle_spawn_manager.vehicle_list
         self.vehicle_trajectory_dict = vehicle_spawn_manager.trajectory_dict
         self.vehicle_agent_dict = vehicle_spawn_manager.vehicle_agent_dict
+
+    def _has_pending_ped_spawns(self):
+        return any(spawner.quantity > 0 for spawner in self.ped_spawn_manager.ped_spawners)
+
+    def _has_pending_vehicle_spawns(self):
+        return any(spawner.quantity > 0 for spawner in self.vehicle_spawn_manager.vehicle_spawners)
+
+    def _update_scene_route_navigation(self):
+        if self.ped_sim.peds.state is None or not self.scene_route_dict:
+            return set()
+
+        completed_peds = set()
+        active_ped_names = set(self.ped_sim.peds.name())
+        for ped_name in [name for name in list(self.scene_route_dict.keys()) if name in active_ped_names]:
+            ped = self.ped_sim.peds.state[self.ped_sim.peds.state['name'] == ped_name][0]
+            follower = self.scene_route_dict[ped_name]
+            navigation_target = follower.update(ped['loc'], ped['mode'].target_speed)
+            self.ped_sim.peds.update_navigation_target(
+                ped_name,
+                navigation_target.next_waypoint,
+                navigation_target.crossing_road,
+            )
+            self.ped_sim.update_scene_route_guidance(ped_name, navigation_target)
+            if navigation_target.complete:
+                completed_peds.add(ped_name)
+
+        for ped_name in list(self.scene_route_dict.keys()):
+            if ped_name not in active_ped_names:
+                self.scene_route_dict.pop(ped_name, None)
+                self.ped_sim.remove_scene_route_guidance(ped_name)
+
+        return completed_peds
+
+    def _despawn_pedestrian(self, ped_name):
+        self.ped_sim.destroy_pedestrian(ped_name)
+        self.carla_sim.destroy_actor(self.walker_dict[ped_name])
+        self.walker_dict.pop(ped_name)
+        self.ped_spawn_manager.walker_meta_dict.pop(ped_name, None)
+        self.waypoint_dict.pop(ped_name, None)
+        self.scene_route_dict.pop(ped_name, None)
+        if self.sequence_manager is not None:
+            self.sequence_manager.on_ped_despawned(ped_name)
+        logging.info(f'Despawned pedestrian {ped_name}.')
+
+    def is_complete(self):
+        unresolved_ego_abort = self._unresolved_ego_abort_message()
+        if unresolved_ego_abort is not None:
+            raise RuntimeError(unresolved_ego_abort)
+
+        if (
+            self.sequence_manager is not None
+            and self.sequence_manager.policy.get('stop_on_ego_end', True)
+            and self.sequence_manager.resolved_ego is not None
+            and self.sequence_manager.resolved_ego.get('despawned', False)
+        ):
+            logging.info('Stopping simulation because ego pedestrian completed and sampling.stop_on_ego_end=true.')
+            return True
+
+        if self.duration is not None and self.carla_sim.get_sim_time() >= self.duration:
+            logging.info('Reached requested duration %.2fs. Stopping simulation.', self.duration)
+            return True
+
+        if self._has_pending_ped_spawns():
+            return False
+
+        if self.walker_dict:
+            return False
+
+        if self._has_pending_vehicle_spawns():
+            return False
+
+        if self.vehicle_list or self.vehicle_trajectory_dict or self.vehicle_agent_dict:
+            return False
+
+        return True
+
+    def _unresolved_ego_abort_message(self):
+        if self.sequence_manager is None:
+            return None
+        return self.ped_spawn_manager.unresolved_ego_abort_message(self.sequence_manager)
 
     def tick(self):
         """
@@ -52,6 +137,8 @@ class SimulationRunner:
         sim_time = self.carla_sim.get_sim_time()
         self.ped_spawn_manager.tick(sim_time)
         self.vehicle_spawn_manager.tick(sim_time)
+        if self.sampling_collector is not None:
+            self.sampling_collector.try_activate()
 
         # Teleport vehicles that are not controlled by the traffic manager or agent to the next point on their
         # predefined trajectory
@@ -75,6 +162,7 @@ class SimulationRunner:
         # Tick CARLA simulation and receive new location and velocity of all pedestrians and dynamic obstacles
         # (vehicles) and propagate the information to the pedestrian simulation
         self.carla_sim.tick()
+        snapshot = self.carla_sim.world.get_snapshot()
         all_actors = self.carla_sim.world.get_actors()
         for actor_id in self.walker_dict.values():
             walker = self.carla_sim.get_actor(actor_id)
@@ -98,6 +186,11 @@ class SimulationRunner:
                 for border in carla_borders:
                     self.carla_sim.draw_points(border, self.step_length)
 
+        if self.sampling_collector is not None:
+            self.sampling_collector.capture_frame(snapshot)
+
+        completed_scene_route_peds = self._update_scene_route_navigation()
+
         # Tick pedestrian simulation and propagate new velocities resulting from social force model to CARLA
         self.ped_sim.tick(sim_time)
         new_velocities = self.ped_sim.get_new_velocities()
@@ -115,7 +208,8 @@ class SimulationRunner:
 
         # get all pedestrians that arrived at their next waypoint and either assign a new waypoint or despawn
         # them if they reached their final destination
-        arrived_peds = self.ped_sim.get_arrived_peds(self.waypoint_threshold)
+        scene_route_peds = set(self.scene_route_dict.keys())
+        arrived_peds = set(self.ped_sim.get_arrived_peds(self.waypoint_threshold)) - scene_route_peds
         for ped_name in arrived_peds:
             remaining_waypoints = self.waypoint_dict[ped_name]
 
@@ -125,11 +219,12 @@ class SimulationRunner:
                 self.waypoint_dict[ped_name] = remaining_waypoints
 
             elif not remaining_waypoints and self.despawn_on_arrival:
-                self.ped_sim.destroy_pedestrian(ped_name)
-                self.carla_sim.destroy_actor(self.walker_dict[ped_name])
-                self.walker_dict.pop(ped_name)
-                self.waypoint_dict.pop(ped_name)
-                logging.info(f'Despawned pedestrian {ped_name}.')
+                self._despawn_pedestrian(ped_name)
+
+        if self.despawn_on_arrival:
+            for ped_name in completed_scene_route_peds:
+                if ped_name in self.walker_dict:
+                    self._despawn_pedestrian(ped_name)
 
     def close(self):
         """
@@ -144,17 +239,35 @@ class SimulationRunner:
             self.carla_sim.destroy_actor(carla_actor_id)
 
         # Closing pedestrian simulation and CARLA client.
+        if self.sampling_collector is not None:
+            self.sampling_collector.close()
         self.carla_sim.close()
         self.ped_sim.close()
 
-        if self.output_csv:
+        should_generate_simulation_records = self.output_csv or (
+            self.sequence_manager is not None
+            and self.sequence_manager.policy.get('export', {}).get('simulation_records', True)
+        )
+
+        if should_generate_simulation_records:
             scenario_name = self.scenario_config.get('scenario_name')
 
-            output_gen = OutputGenerator(self.ped_sim, self.output_path, scenario_name)
+            output_gen = OutputGenerator(
+                self.ped_sim,
+                self.output_path,
+                scenario_name,
+                weather_metadata=self.carla_sim.generated_weather,
+            )
             output_gen.generate_ped_csv()
             output_gen.generate_veh_csv()
             output_gen.generate_borders_csv()
             output_gen.generate_obstacles_csv()
+            output_gen.generate_weather_json()
+            if self.sequence_manager is not None:
+                self.sequence_manager.finalize_from_sim_output(
+                    output_gen.output_dir,
+                    self.carla_sim,
+                )
 
 
 def simulation_loop(args):
@@ -166,6 +279,8 @@ def simulation_loop(args):
     scenario_config = load_config(args.scenario_config)
     sfm_config = load_config(args.sfm_config)
     step_length = scenario_config.get('step_length', 0.05)
+    sampling_setup = load_sampling_setup(scenario_config, args.scenario_config)
+    sequence_manager = SamplingSequenceManager(scenario_config, sampling_setup) if sampling_setup else None
 
     # initialize CARLA simulation
     carla_simulation = CarlaSimulation(args, scenario_config)
@@ -200,12 +315,26 @@ def simulation_loop(args):
     pedestrian_simulation = PedestrianSimulation(borders, section_info, obstacles, sfm_config, step_length)
 
     # initialize pedestrian and vehicle spawn manager
-    ped_spawn_manager = PedSpawnManager(scenario_config, carla_simulation, pedestrian_simulation)
+    ped_spawn_manager = PedSpawnManager(
+        scenario_config,
+        carla_simulation,
+        pedestrian_simulation,
+        spawn_event_listener=sequence_manager,
+    )
     vehicle_spawn_manager = VehicleSpawnManager(scenario_config, carla_simulation)
+    sampling_collector = SamplingCollector(carla_simulation, sequence_manager) if sequence_manager else None
 
     # initialize simulation runner
-    sim_runner = SimulationRunner(pedestrian_simulation, carla_simulation, ped_spawn_manager, vehicle_spawn_manager,
-                                  scenario_config, args)
+    sim_runner = SimulationRunner(
+        pedestrian_simulation,
+        carla_simulation,
+        ped_spawn_manager,
+        vehicle_spawn_manager,
+        scenario_config,
+        args,
+        sequence_manager=sequence_manager,
+        sampling_collector=sampling_collector,
+    )
 
     # main simulation loop
     try:
@@ -213,6 +342,9 @@ def simulation_loop(args):
             start = time.time()
 
             sim_runner.tick()
+            if sim_runner.is_complete():
+                logging.info('Scenario completed. No active actors or pending spawns remain.')
+                break
 
             end = time.time()
             elapsed = end - start
@@ -264,6 +396,10 @@ if __name__ == '__main__':
                            default='output',
                            type=str,
                            help='path for output CSV files')
+    argparser.add_argument('--duration',
+                           default=None,
+                           type=float,
+                           help='optional maximum simulated time in seconds before stopping gracefully')
     argparser.add_argument('--debug', action='store_true', help='enable debug messages')
     arguments = argparser.parse_args()
 

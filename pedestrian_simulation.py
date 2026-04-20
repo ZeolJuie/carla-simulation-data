@@ -21,6 +21,7 @@ class PedestrianSimulation:
         self.dyn_obs_vel = []
         self.dyn_obs_extent = []
         self.all_dyn_obs_states = {}
+        self.scene_route_guidance = {}
 
         self.peds = PedState(sfm_config)
 
@@ -38,6 +39,12 @@ class PedestrianSimulation:
             force_dict['acceleration_force'] = forces.AccelerationForce(self.step_length, self.sfm_config)
         if activated_forces.get('pedestrian_force', False):
             force_dict['pedestrian_force'] = forces.PedestrianForce(self.step_length, self.sfm_config)
+        if activated_forces.get('scene_route_force', True):
+            force_dict['scene_route_force'] = forces.SceneRouteForce(
+                self.step_length,
+                self.sfm_config,
+                self.scene_route_guidance,
+            )
         if activated_forces.get('border_force', False):
             force_dict['border_force'] = forces.BorderForce(self.step_length, self.sfm_config, self.borders,
                                                             self.section_info)
@@ -101,9 +108,20 @@ class PedestrianSimulation:
 
     def destroy_pedestrian(self, ped_name):
         self.peds.remove_pedestrian(ped_name)
+        self.scene_route_guidance.pop(ped_name, None)
 
     def update_ped_info(self, walker_id, location, velocity):
         self.peds.update_state(walker_id, location, velocity)
+
+    def update_scene_route_guidance(self, ped_name, navigation_target):
+        self.scene_route_guidance[ped_name] = {
+            'route_point': np.array(navigation_target.route_point, dtype=float, copy=True),
+            'route_tangent': np.array(navigation_target.route_tangent, dtype=float, copy=True),
+            'active': bool(navigation_target.route_force_active),
+        }
+
+    def remove_scene_route_guidance(self, ped_name):
+        self.scene_route_guidance.pop(ped_name, None)
 
     def update_dynamic_obstacles(self, dynamic_obstacles):
         self.dyn_obs_ids, obstacle_pos, self.dyn_obs_heading, self.dyn_obs_vel, self.dyn_obs_extent, borders \

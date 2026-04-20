@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="7983" viewBox="0 0 69.587 308.631">
+<title>Town06 walkable cells (crossing approach=20m, sidewalk chunk=50m)</title>
+<rect width="100%" height="100%" fill="#f7f6f1"/>
+<text x="14" y="26" font-family="monospace" font-size="14" fill="#333">Town06 walkable cells (crossing approach=20m, sidewalk chunk=50m)</text>
+<g opacity="0.16" stroke="#111" stroke-linecap="round" stroke-linejoin="round">
+<line x1="54.879" y1="12.000" x2="55.146" y2="32.474" stroke-width="2.300"/>
+<line x1="26.173" y1="15.566" x2="56.280" y2="12.704" stroke-width="2.300"/>
+<line x1="54.329" y1="32.992" x2="25.890" y2="33.508" stroke-width="2.300"/>
+<line x1="23.291" y1="30.897" x2="24.429" y2="12.797" stroke-width="2.300"/>
+<line x1="55.452" y1="292.652" x2="53.871" y2="292.967" stroke-width="2.300"/>
+<line x1="50.156" y1="295.895" x2="50.035" y2="296.631" stroke-width="2.300"/>
+<line x1="57.587" y1="212.040" x2="56.782" y2="227.106" stroke-width="2.300"/>
+<line x1="48.879" y1="207.682" x2="48.883" y2="210.081" stroke-width="2.300"/>
+<line x1="23.440" y1="293.755" x2="23.457" y2="296.249" stroke-width="2.300"/>
+<line x1="14.185" y1="292.405" x2="15.259" y2="277.342" stroke-width="2.300"/>
+<line x1="55.906" y1="114.403" x2="54.608" y2="133.575" stroke-width="2.300"/>
+<line x1="21.455" y1="135.111" x2="23.908" y2="118.768" stroke-width="2.300"/>
+<line x1="12.000" y1="212.577" x2="14.499" y2="212.578" stroke-width="2.300"/>
+<line x1="22.868" y1="206.386" x2="22.873" y2="203.813" stroke-width="2.300"/>
+</g>
+<g id="crossing_001" stroke="#e14646" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="54.879" y1="12.000" x2="55.146" y2="32.474" stroke-width="3.000"/>
+</g>
+<g id="crossing_002" stroke="#46e172" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="26.173" y1="15.566" x2="56.280" y2="12.704" stroke-width="3.000"/>
+</g>
+<g id="crossing_003" stroke="#9e46e1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="54.329" y1="32.992" x2="25.890" y2="33.508" stroke-width="3.000"/>
+</g>
+<g id="crossing_004" stroke="#e1c946" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="23.291" y1="30.897" x2="24.429" y2="12.797" stroke-width="3.000"/>
+</g>
+<g id="crossing_005" stroke="#46cce1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="55.452" y1="292.652" x2="53.871" y2="292.967" stroke-width="3.000"/>
+</g>
+<g id="crossing_006" stroke="#e146a0" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="50.156" y1="295.895" x2="50.035" y2="296.631" stroke-width="3.000"/>
+</g>
+<g id="crossing_007" stroke="#75e146" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="57.587" y1="212.040" x2="56.782" y2="227.106" stroke-width="3.000"/>
+</g>
+<g id="crossing_008" stroke="#4649e1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="48.879" y1="207.682" x2="48.883" y2="210.081" stroke-width="3.000"/>
+</g>
+<g id="crossing_009" stroke="#e16f46" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="23.440" y1="293.755" x2="23.457" y2="296.249" stroke-width="3.000"/>
+</g>
+<g id="crossing_010" stroke="#46e19b" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="14.185" y1="292.405" x2="15.259" y2="277.342" stroke-width="3.000"/>
+</g>
+<g id="crossing_011" stroke="#c746e1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="55.906" y1="114.403" x2="54.608" y2="133.575" stroke-width="3.000"/>
+</g>
+<g id="crossing_012" stroke="#cfe146" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="21.455" y1="135.111" x2="23.908" y2="118.768" stroke-width="3.000"/>
+</g>
+<g id="crossing_013" stroke="#46a3e1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="12.000" y1="212.577" x2="14.499" y2="212.578" stroke-width="3.000"/>
+</g>
+<g id="crossing_014" stroke="#e14677" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<line x1="22.868" y1="206.386" x2="22.873" y2="203.813" stroke-width="3.000"/>
+</g>
+<text x="55.013" y="22.237" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">001</text>
+<text x="41.227" y="14.135" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">002</text>
+<text x="40.110" y="33.250" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">003</text>
+<text x="23.860" y="21.847" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">004</text>
+<text x="54.662" y="292.810" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">005</text>
+<text x="50.096" y="296.263" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">006</text>
+<text x="57.185" y="219.573" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">007</text>
+<text x="48.881" y="208.882" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">008</text>
+<text x="23.449" y="295.002" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">009</text>
+<text x="14.723" y="284.874" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">010</text>
+<text x="55.258" y="123.989" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">011</text>
+<text x="22.682" y="126.940" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">012</text>
+<text x="13.250" y="212.578" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">013</text>
+<text x="22.871" y="205.100" text-anchor="middle" dominant-baseline="middle" font-family="monospace" font-size="4.4" fill="#1e1e1e">014</text>
+</svg>

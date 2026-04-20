@@ -1,4 +1,5 @@
 import csv
+import json
 import os
 import time
 
@@ -8,13 +9,14 @@ import numpy as np
 class OutputGenerator:
     """Class to generate csv-files of the simulation results (pedestrian and vehicle trajectories)"""
 
-    def __init__(self, ped_sim, output_path, scenario_name):
+    def __init__(self, ped_sim, output_path, scenario_name, weather_metadata=None):
         self.scene = ped_sim
         self.ped_states = self.scene.peds.all_states
         self.veh_states = self.scene.all_dyn_obs_states
         self.static_obstacles = self.scene.static_obstacles
         self.borders = self.scene.borders
         self.output_path = output_path
+        self.weather_metadata = weather_metadata
 
         time_stamp = time.strftime('%Y%m%d-%H%M%S')
 
@@ -32,7 +34,7 @@ class OutputGenerator:
     def generate_ped_csv(self):
         output_file = os.path.join(self.output_dir, 'pedestrian.csv')
 
-        header = ['ped_id', 'frame', 'time', 'x', 'y', 'v_x', 'v_y', 'mode']
+        header = ['ped_id', 'frame', 'time', 'x', 'y', 'v_x', 'v_y', 'mode', 'group_id', 'group_member_index']
 
         with open(output_file, 'w', encoding='UTF8') as f:
             writer = csv.writer(f)
@@ -47,8 +49,10 @@ class OutputGenerator:
                     v_x = ped['vel'][0]
                     v_y = ped['vel'][1]
                     mode = ped['mode']
+                    group_id = int(ped['group_id'])
+                    group_member_index = int(ped['group_member_index'])
 
-                    writer.writerow([ped_id, frame, sim_time, x, y, v_x, v_y, mode])
+                    writer.writerow([ped_id, frame, sim_time, x, y, v_x, v_y, mode, group_id, group_member_index])
 
     def generate_veh_csv(self):
         output_file = os.path.join(self.output_dir, 'vehicle.csv')
@@ -108,3 +112,11 @@ class OutputGenerator:
                     y = point[1]
 
                     writer.writerow([obs_id, x_pos, y_pos, x, y])
+
+    def generate_weather_json(self):
+        if self.weather_metadata is None:
+            return
+
+        output_file = os.path.join(self.output_dir, 'weather.json')
+        with open(output_file, 'w', encoding='utf-8') as handle:
+            json.dump(self.weather_metadata, handle, indent=2, sort_keys=True)

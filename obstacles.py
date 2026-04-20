@@ -3,6 +3,7 @@ import hashlib
 import itertools
 import logging
 import os
+import tempfile
 import time
 
 import carla
@@ -37,15 +38,24 @@ def extract_sidewalk(carla_map, scenario_config):
     dirname = os.path.join('cache', 'sidewalk_borders')
     full_path = str(os.path.join(dirname, filename))
 
+    cache_loaded = False
     if os.path.isfile(full_path):
-        # Load sidewalk borders from cache file
-        logging.info('Using cached sidewalk borders.')
-        loaded_file = np.load(full_path, allow_pickle=True)
-        numpy_borders = loaded_file['borders']
-        section_info = loaded_file['section_info']
-        carla_borders = [[carla.Vector3D(p[0], p[1], 0.5) for p in border] for border in numpy_borders]
+        try:
+            # Load sidewalk borders from cache file
+            logging.info('Using cached sidewalk borders.')
+            loaded_file = np.load(full_path, allow_pickle=True)
+            numpy_borders = [np.array(border) for border in loaded_file['borders']]
+            section_info = loaded_file['section_info'].tolist()
+            carla_borders = [[carla.Vector3D(p[0], p[1], 0.5) for p in border] for border in numpy_borders]
+            cache_loaded = True
+        except (KeyError, ValueError, OSError, EOFError) as exc:
+            logging.warning('Failed to load sidewalk cache %s: %s. Rebuilding cache.', full_path, exc)
+            try:
+                os.remove(full_path)
+            except OSError:
+                pass
 
-    else:
+    if not cache_loaded:
         carla_borders, section_info = extract_sidewalk_borders(carla_map, resolution)
 
         # convert carla Vector3d to numpy arrays
@@ -60,8 +70,20 @@ def extract_sidewalk(carla_map, scenario_config):
         for town_filename in list_filenames:
             os.remove(town_filename)
 
-        # Save sidewalk borders and section info for next executions of same map
-        np.savez(full_path, borders=numpy_borders, section_info=section_info)
+        # Save sidewalk borders and section info for next executions of same map.
+        # These collections are ragged, so they must be persisted as object arrays.
+        fd, tmp_path = tempfile.mkstemp(dir=dirname, suffix='.npz')
+        os.close(fd)
+        try:
+            np.savez(
+                tmp_path,
+                borders=np.array(numpy_borders, dtype=object),
+                section_info=np.array(section_info, dtype=object),
+            )
+            os.replace(tmp_path, full_path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     end = time.time()
     logging.info('Finished extracting sidewalks. Time: ' + str(end - start))
@@ -183,12 +205,22 @@ def extract_obstacles(carla_world, scenario_config):
     ellipse_shape = scenario_config.get('obstacles', {}).get('ellipse_shape', True)
     max_obstacle_z_pos = scenario_config.get('obstacles', {}).get('max_obstacle_z_pos', 0.3)
 
-    # Get objects from Carla world map
-    env_objects = carla_world.get_environment_objects(carla.CityObjectLabel.Static)
-    #env_objects.extend(carla_world.get_environment_objects(carla.CityObjectLabel.Dynamic))
-    env_objects.extend(carla_world.get_environment_objects(carla.CityObjectLabel.Poles))
-    env_objects.extend(carla_world.get_environment_objects(carla.CityObjectLabel.Walls))
-    env_objects.extend(carla_world.get_environment_objects(carla.CityObjectLabel.Vehicles))
+    # Get objects from Carla world map. CARLA label enums differ slightly across versions,
+    # so only request labels that exist in the active Python API.
+    env_objects = []
+    label_names = ['Static', 'Poles', 'Walls']
+    if hasattr(carla.CityObjectLabel, 'Vehicles'):
+        label_names.append('Vehicles')
+    else:
+        label_names.extend(['Car', 'Truck', 'Bus', 'Motorcycle', 'Bicycle', 'Train'])
+
+    for label_name in label_names:
+        label = getattr(carla.CityObjectLabel, label_name, None)
+        if label is not None:
+            env_objects.extend(carla_world.get_environment_objects(label))
+
+    # Different label families can overlap across CARLA versions, so keep only one object per id.
+    env_objects = list({obj.id: obj for obj in env_objects}.values())
 
     carla_obstacle_borders = []
     obstacle_positions = []

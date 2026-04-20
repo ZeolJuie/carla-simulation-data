@@ -3,6 +3,8 @@ import math
 
 import carla
 
+from weather_generator import generate_weather
+
 
 class CarlaSimulation:
 
@@ -14,10 +16,12 @@ class CarlaSimulation:
         self.map_path = self.map_config['map_path']
         self.unload_props = self.map_config.get('unload_props', False)
         self.draw_obstacles = self.map_config.get('draw_obstacles', False)
+        self.carla_timeout = self.map_config.get('carla_timeout', 10.0)
+        self.generated_weather = None
 
         # connect to CARLA server
         self.client = carla.Client(args.carla_host, args.carla_port)
-        self.client.set_timeout(10.0)
+        self.client.set_timeout(self.carla_timeout)
         self.world = self.client.get_world()
         self.start_time = self.world.get_snapshot().timestamp.elapsed_seconds
 
@@ -27,6 +31,14 @@ class CarlaSimulation:
             self.world = self.client.load_world(self.map_name)
             # update map variable and start time after loading new map
             self.carla_map = self.world.get_map()
+
+        weather_config = self.config.get('weather')
+        if weather_config is not None:
+            fallback_weather_seed = self.config.get('walker', {}).get('pedestrian_seed', 0)
+            weather, weather_metadata = generate_weather(weather_config, fallback_weather_seed)
+            if weather is not None:
+                self.world.set_weather(weather)
+                self.generated_weather = weather_metadata
 
         # unload props
         if self.unload_props:
