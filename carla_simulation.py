@@ -1,9 +1,20 @@
+import json
 import logging
 import math
+import time
+from pathlib import Path
 
 import carla
 
 from weather_generator import generate_weather
+
+
+DEFAULT_TILE_STREAM_DISTANCE_M = 1200.0
+DEFAULT_ACTOR_ACTIVE_DISTANCE_M = 1200.0
+DEFAULT_TILE_SPECTATOR_HEIGHT_M = 220.0
+DEFAULT_TILE_SPECTATOR_PITCH_DEG = -88.0
+DEFAULT_TILE_STREAMING_WAIT_TICKS = 8
+DEFAULT_TILE_STREAMING_WAIT_TIMEOUT_S = 1.0
 
 
 class CarlaSimulation:
@@ -18,6 +29,7 @@ class CarlaSimulation:
         self.draw_obstacles = self.map_config.get('draw_obstacles', False)
         self.carla_timeout = self.map_config.get('carla_timeout', 10.0)
         self.generated_weather = None
+        self.tile_streaming_context = self._load_tile_streaming_context()
 
         # connect to CARLA server
         self.client = carla.Client(args.carla_host, args.carla_port)
@@ -31,6 +43,8 @@ class CarlaSimulation:
             self.world = self.client.load_world(self.map_name)
             # update map variable and start time after loading new map
             self.carla_map = self.world.get_map()
+
+        self._apply_tile_streaming_anchor_if_needed()
 
         weather_config = self.config.get('weather')
         if weather_config is not None:
@@ -69,7 +83,7 @@ class CarlaSimulation:
         spectator_loc = self.map_config.get('spectator_location')
         spectator_rot = self.map_config.get('spectator_rotation')
 
-        if spectator_loc is not None and spectator_rot is not None:
+        if self.tile_streaming_context is None and spectator_loc is not None and spectator_rot is not None:
             spectator = self.world.get_spectator()
             spectator_transform = carla.Transform()
             spectator_transform.location = carla.Location(spectator_loc[0], spectator_loc[1], spectator_loc[2])
@@ -78,6 +92,105 @@ class CarlaSimulation:
 
         self.blueprint_library = self.world.get_blueprint_library()
         self.walker_blueprints = self.blueprint_library.filter('walker.pedestrian.*')
+
+    def _load_tile_streaming_context(self):
+        scene_catalog_path = self.map_config.get('scene_catalog_path')
+        if not scene_catalog_path:
+            return None
+
+        catalog_path = Path(scene_catalog_path)
+        if not catalog_path.exists():
+            logging.warning('Tile streaming anchor skipped because scene catalog does not exist: %s', catalog_path)
+            return None
+
+        try:
+            payload = json.loads(catalog_path.read_text(encoding='utf-8'))
+        except Exception as exc:
+            logging.warning('Tile streaming anchor skipped because scene catalog could not be parsed: %s', exc)
+            return None
+
+        tile = payload.get('tile')
+        if not isinstance(tile, dict):
+            return None
+
+        core_bounds = tile.get('core_bounds')
+        halo_bounds = tile.get('halo_bounds', core_bounds)
+        if not core_bounds or not halo_bounds:
+            logging.warning('Tile streaming anchor skipped because tile bounds are incomplete in %s', catalog_path)
+            return None
+
+        halo_min_x, halo_min_y, halo_max_x, halo_max_y = [float(value) for value in halo_bounds]
+        halo_width = halo_max_x - halo_min_x
+        halo_height = halo_max_y - halo_min_y
+        stream_distance = max(DEFAULT_TILE_STREAM_DISTANCE_M, max(halo_width, halo_height) + 400.0)
+        actor_active_distance = max(DEFAULT_ACTOR_ACTIVE_DISTANCE_M, stream_distance)
+
+        return {
+            'catalog_path': str(catalog_path),
+            'tile_id': tile.get('id'),
+            'core_bounds': [float(value) for value in core_bounds],
+            'halo_bounds': [float(value) for value in halo_bounds],
+            'stream_distance': float(stream_distance),
+            'actor_active_distance': float(actor_active_distance),
+        }
+
+    @staticmethod
+    def _bounds_center(bounds):
+        min_x, min_y, max_x, max_y = [float(value) for value in bounds]
+        return carla.Location(x=(min_x + max_x) * 0.5, y=(min_y + max_y) * 0.5, z=0.0)
+
+    def _nearest_waypoint_height(self, center):
+        for lane_type in (carla.LaneType.Sidewalk, carla.LaneType.Driving, carla.LaneType.Any):
+            try:
+                waypoint = self.carla_map.get_waypoint(center, lane_type=lane_type)
+            except RuntimeError:
+                waypoint = None
+            if waypoint is not None:
+                return float(waypoint.transform.location.z)
+        return 0.0
+
+    def _apply_tile_streaming_anchor_if_needed(self):
+        if self.tile_streaming_context is None:
+            return
+
+        settings = self.world.get_settings()
+        if hasattr(settings, 'tile_stream_distance'):
+            settings.tile_stream_distance = self.tile_streaming_context['stream_distance']
+        if hasattr(settings, 'actor_active_distance'):
+            settings.actor_active_distance = self.tile_streaming_context['actor_active_distance']
+        if hasattr(settings, 'spectator_as_ego'):
+            settings.spectator_as_ego = True
+        self.world.apply_settings(settings)
+
+        center = self._bounds_center(self.tile_streaming_context['core_bounds'])
+        base_z = self._nearest_waypoint_height(center)
+        spectator_transform = carla.Transform(
+            carla.Location(x=center.x, y=center.y, z=base_z + DEFAULT_TILE_SPECTATOR_HEIGHT_M),
+            carla.Rotation(pitch=DEFAULT_TILE_SPECTATOR_PITCH_DEG, yaw=0.0, roll=0.0),
+        )
+        self.world.get_spectator().set_transform(spectator_transform)
+        logging.info(
+            'Tile streaming anchor enabled tile_id=%s center=[%.3f, %.3f, %.3f] stream_distance=%.1f actor_active_distance=%.1f catalog=%s',
+            self.tile_streaming_context['tile_id'],
+            center.x,
+            center.y,
+            base_z,
+            self.tile_streaming_context['stream_distance'],
+            self.tile_streaming_context['actor_active_distance'],
+            self.tile_streaming_context['catalog_path'],
+        )
+
+        for tick_index in range(DEFAULT_TILE_STREAMING_WAIT_TICKS):
+            try:
+                self.world.wait_for_tick(DEFAULT_TILE_STREAMING_WAIT_TIMEOUT_S)
+            except RuntimeError:
+                time.sleep(0.2)
+            logging.info(
+                'Tile streaming anchor warmup tick=%d/%d tile_id=%s',
+                tick_index + 1,
+                DEFAULT_TILE_STREAMING_WAIT_TICKS,
+                self.tile_streaming_context['tile_id'],
+            )
 
     def tick(self):
         """

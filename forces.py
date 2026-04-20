@@ -333,9 +333,14 @@ class ObstacleForce(Force):
         return force
 
     def update_obstacles(self, obstacles):
+        if not obstacles:
+            self.obstacle_locs = np.zeros((0, 2))
+            self.obstacle_borders = []
+            return
+
         obstacle_locs, obstacle_borders = zip(*obstacles)
         self.obstacle_locs = np.array(obstacle_locs)
-        self.obstacle_borders = obstacle_borders
+        self.obstacle_borders = list(obstacle_borders)
 
     def update_obstacle_velocities(self, velocities):
         self.obstacle_velocities = np.array(velocities)

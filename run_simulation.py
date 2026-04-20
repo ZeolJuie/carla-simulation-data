@@ -48,6 +48,14 @@ class SimulationRunner:
         self.vehicle_list = vehicle_spawn_manager.vehicle_list
         self.vehicle_trajectory_dict = vehicle_spawn_manager.trajectory_dict
         self.vehicle_agent_dict = vehicle_spawn_manager.vehicle_agent_dict
+        self.follow_ego_spectator = (
+            self.sequence_manager is not None
+            and self.sampling_collector is not None
+        )
+        self.ego_spectator_follow_distance = 4.5
+        self.ego_spectator_follow_height = 2.5
+        self.ego_spectator_follow_pitch = -15.0
+        self._ego_spectator_follow_logged = False
 
     def _has_pending_ped_spawns(self):
         return any(spawner.quantity > 0 for spawner in self.ped_spawn_manager.ped_spawners)
@@ -129,6 +137,47 @@ class SimulationRunner:
             return None
         return self.ped_spawn_manager.unresolved_ego_abort_message(self.sequence_manager)
 
+    def _update_ego_spectator_follow(self):
+        if not self.follow_ego_spectator or self.sequence_manager is None:
+            return
+
+        resolved_ego = self.sequence_manager.resolved_ego
+        if resolved_ego is None:
+            return
+
+        actor_id = int(resolved_ego.get('actor_id', 0))
+        if actor_id <= 0:
+            return
+
+        ego_actor = self.carla_sim.world.get_actor(actor_id)
+        if ego_actor is None or not ego_actor.is_alive:
+            return
+
+        ego_transform = ego_actor.get_transform()
+        spectator_transform = carla.Transform(
+            ego_transform.transform(
+                carla.Vector3D(
+                    x=-self.ego_spectator_follow_distance,
+                    y=0.0,
+                    z=self.ego_spectator_follow_height,
+                )
+            ),
+            carla.Rotation(
+                pitch=self.ego_spectator_follow_pitch,
+                yaw=ego_transform.rotation.yaw,
+                roll=0.0,
+            ),
+        )
+        self.carla_sim.world.get_spectator().set_transform(spectator_transform)
+
+        if not self._ego_spectator_follow_logged:
+            logging.info(
+                'Enabled spectator follow for ego actor_id=%d ped_name=%s.',
+                actor_id,
+                resolved_ego.get('ped_name'),
+            )
+            self._ego_spectator_follow_logged = True
+
     def tick(self):
         """
         Tick to simulation synchronization. One tick = one simulation step.
@@ -161,9 +210,12 @@ class SimulationRunner:
 
         # Tick CARLA simulation and receive new location and velocity of all pedestrians and dynamic obstacles
         # (vehicles) and propagate the information to the pedestrian simulation
+        if self.sampling_collector is not None:
+            self.sampling_collector.update_sensor_world_poses()
         self.carla_sim.tick()
         snapshot = self.carla_sim.world.get_snapshot()
         all_actors = self.carla_sim.world.get_actors()
+        self._update_ego_spectator_follow()
         for actor_id in self.walker_dict.values():
             walker = self.carla_sim.get_actor(actor_id)
             carla_location = walker.get_location()
@@ -282,22 +334,47 @@ def simulation_loop(args):
     sampling_setup = load_sampling_setup(scenario_config, args.scenario_config)
     sequence_manager = SamplingSequenceManager(scenario_config, sampling_setup) if sampling_setup else None
 
-    # initialize CARLA simulation
+    logging.info('Stage: init CarlaSimulation start')
     carla_simulation = CarlaSimulation(args, scenario_config)
+    logging.info('Stage: init CarlaSimulation done map=%s', carla_simulation.carla_map.name)
 
-    # extract borders from scenario config
+    logging.info('Stage: extract borders from scenario config start')
     borders, section_info, carla_borders = extract_borders_from_config(scenario_config)
+    logging.info(
+        'Stage: extract borders from scenario config done borders=%d sections=%d carla_borders=%d',
+        len(borders),
+        len(section_info),
+        len(carla_borders),
+    )
 
-    # extract sidewalk borders from map and add to other borders
+    logging.info('Stage: extract sidewalk borders start')
     sidewalk_borders, sidewalk_section_info, carla_sidewalk_borders = extract_sidewalk(carla_simulation.carla_map,
                                                                                        scenario_config)
+    logging.info(
+        'Stage: extract sidewalk borders done sidewalks=%d sidewalk_sections=%d carla_sidewalk_borders=%d',
+        len(sidewalk_borders),
+        len(sidewalk_section_info),
+        len(carla_sidewalk_borders),
+    )
     borders.extend(sidewalk_borders)
     section_info.extend(sidewalk_section_info)
     carla_borders.extend(carla_sidewalk_borders)
+    logging.info(
+        'Stage: merged manual+sidewalk borders done total_borders=%d total_sections=%d total_carla_borders=%d',
+        len(borders),
+        len(section_info),
+        len(carla_borders),
+    )
 
-    # extract obstacles from map
+    logging.info('Stage: extract obstacles from map start')
     obstacle_positions, obstacle_borders, carla_obstacle_borders = extract_obstacles(carla_simulation.world,
                                                                                      scenario_config)
+    logging.info(
+        'Stage: extract obstacles from map done obstacle_positions=%d obstacle_borders=%d carla_obstacle_borders=%d',
+        len(obstacle_positions),
+        len(obstacle_borders),
+        len(carla_obstacle_borders),
+    )
 
     # # only for comparison purposes (obstacle evasion with simple border force vs. obstacle evasion force)
     # borders.extend(obstacle_borders)

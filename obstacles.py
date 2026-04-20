@@ -195,6 +195,27 @@ def lateral_shift(transform, shift):
     return transform.location + shift * transform.get_forward_vector()
 
 
+def _object_bottom_z(bounding_box, transform):
+    del transform
+    return bounding_box.location.z - bounding_box.extent.z
+
+
+def _nearest_ground_height_from_waypoint(carla_map, location):
+    lane_type_order = [
+        carla.LaneType.Sidewalk,
+        carla.LaneType.Driving,
+        carla.LaneType.Any,
+    ]
+    for lane_type in lane_type_order:
+        try:
+            waypoint = carla_map.get_waypoint(location, project_to_road=True, lane_type=lane_type)
+        except RuntimeError:
+            waypoint = None
+        if waypoint is not None:
+            return waypoint.transform.location.z, lane_type
+    return None, None
+
+
 def extract_obstacles(carla_world, scenario_config):
     """
     Extracts obstacles from Carla world map and generates border points around its bounding box.
@@ -203,7 +224,14 @@ def extract_obstacles(carla_world, scenario_config):
 
     resolution = scenario_config.get('obstacles', {}).get('resolution', 0.1)
     ellipse_shape = scenario_config.get('obstacles', {}).get('ellipse_shape', True)
-    max_obstacle_z_pos = scenario_config.get('obstacles', {}).get('max_obstacle_z_pos', 0.3)
+    max_obstacle_clearance = scenario_config.get('obstacles', {}).get('max_obstacle_z_pos', 1.0)
+    carla_map = carla_world.get_map()
+    logging.info(
+        'Obstacle extraction: start resolution=%s ellipse_shape=%s max_obstacle_clearance=%s',
+        resolution,
+        ellipse_shape,
+        max_obstacle_clearance,
+    )
 
     # Get objects from Carla world map. CARLA label enums differ slightly across versions,
     # so only request labels that exist in the active Python API.
@@ -213,24 +241,56 @@ def extract_obstacles(carla_world, scenario_config):
         label_names.append('Vehicles')
     else:
         label_names.extend(['Car', 'Truck', 'Bus', 'Motorcycle', 'Bicycle', 'Train'])
+    logging.info('Obstacle extraction: querying labels=%s', label_names)
 
     for label_name in label_names:
         label = getattr(carla.CityObjectLabel, label_name, None)
-        if label is not None:
-            env_objects.extend(carla_world.get_environment_objects(label))
+        if label is None:
+            logging.info('Obstacle extraction: skip missing label=%s', label_name)
+            continue
+        logging.info('Obstacle extraction: query label=%s start', label_name)
+        label_objects = carla_world.get_environment_objects(label)
+        logging.info('Obstacle extraction: query label=%s done count=%d', label_name, len(label_objects))
+        env_objects.extend(label_objects)
 
+    logging.info('Obstacle extraction: dedupe start raw_count=%d', len(env_objects))
     # Different label families can overlap across CARLA versions, so keep only one object per id.
     env_objects = list({obj.id: obj for obj in env_objects}.values())
+    logging.info('Obstacle extraction: dedupe done unique_count=%d', len(env_objects))
 
     carla_obstacle_borders = []
     obstacle_positions = []
 
-    for o in env_objects:
+    for index, o in enumerate(env_objects):
+        if index > 0 and index % 250 == 0:
+            logging.info('Obstacle extraction: processed %d/%d objects', index, len(env_objects))
         bb = o.bounding_box
         vertices = bb.get_local_vertices()[::2]
 
-        # filter out obstacles that are above a defined z-position (e.g. traffic light hanging above a road)
-        if vertices[0].z > max_obstacle_z_pos:
+        object_bottom_z = _object_bottom_z(bb, o.transform)
+        ground_z, ground_lane_type = _nearest_ground_height_from_waypoint(carla_map, o.transform.location)
+        if ground_z is None:
+            logging.info(
+                'Obstacle extraction: skip object_id=%s type=%s reason=no_ground_waypoint loc=(%.3f, %.3f, %.3f)',
+                o.id,
+                o.type,
+                o.transform.location.x,
+                o.transform.location.y,
+                o.transform.location.z,
+            )
+            continue
+
+        clearance = object_bottom_z - ground_z
+        if clearance > max_obstacle_clearance:
+            logging.info(
+                'Obstacle extraction: skip object_id=%s type=%s clearance=%.3f bottom_z=%.3f ground_z=%.3f lane_type=%s',
+                o.id,
+                o.type,
+                clearance,
+                object_bottom_z,
+                ground_z,
+                ground_lane_type,
+            )
             continue
 
         if ellipse_shape:
@@ -294,6 +354,12 @@ def extract_obstacles(carla_world, scenario_config):
         obstacle_positions.append(center)
 
     numpy_obstacle_borders = [np.array([[vec.x, vec.y] for vec in border]) for border in carla_obstacle_borders]
+    logging.info(
+        'Obstacle extraction: completed obstacle_positions=%d numpy_borders=%d carla_borders=%d',
+        len(obstacle_positions),
+        len(numpy_obstacle_borders),
+        len(carla_obstacle_borders),
+    )
 
     return obstacle_positions, numpy_obstacle_borders, carla_obstacle_borders
 

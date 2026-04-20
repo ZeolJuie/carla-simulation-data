@@ -57,6 +57,9 @@ class SamplingCollector:
         self.gait_phase = 0.0
         self.last_motion_time = None
         self.sensor_pose_rows = []
+        self.pending_ego_actor_id = None
+        self.pending_ego_frame = None
+        self.manual_sensor_world_pose = False
 
     def try_activate(self):
         if self.active:
@@ -64,20 +67,40 @@ class SamplingCollector:
         if self.sequence_manager.resolved_ego is None:
             return
 
+        snapshot = self.world.get_snapshot()
+        current_frame = int(snapshot.frame)
         actor_id = int(self.sequence_manager.resolved_ego['actor_id'])
+
+        if self.pending_ego_actor_id != actor_id:
+            self.pending_ego_actor_id = actor_id
+            self.pending_ego_frame = current_frame
+            logging.info(
+                'Pending sampling activation for ego ped=%s actor_id=%d at frame=%d; delaying sensor attach until a later frame.',
+                self.sequence_manager.resolved_ego.get('ped_name'),
+                actor_id,
+                current_frame,
+            )
+            return
+
+        if self.pending_ego_frame is not None and current_frame <= self.pending_ego_frame:
+            return
+
         ego_actor = self.world.get_actor(actor_id)
         if ego_actor is None:
             return
 
         self.ego_actor = ego_actor
         self.ego_metadata = dict(self.sequence_manager.resolved_ego)
+        self.manual_sensor_world_pose = str(self.ego_actor.type_id).startswith('walker.')
         self._spawn_sensors()
         self._initialize_log()
         self._write_calibration_json()
-        self._update_sensor_motion(self.world.get_snapshot())
+        self._update_sensor_motion(snapshot)
         self.active = True
-        logging.info('Activated sampling collector for ego ped=%s actor_id=%d.',
-                     self.ego_metadata.get('ped_name'), actor_id)
+        self.pending_ego_actor_id = None
+        self.pending_ego_frame = None
+        logging.info('Activated sampling collector for ego ped=%s actor_id=%d at frame=%d.',
+                     self.ego_metadata.get('ped_name'), actor_id, current_frame)
 
     def _spawn_sensors(self):
         for sensor_spec in self.sensor_rig.get('sensor', []):
@@ -88,6 +111,7 @@ class SamplingCollector:
                 sensor_spec,
                 self.sequence_manager,
                 self.frame_stride,
+                attach_to_parent=not self.manual_sensor_world_pose,
             )
             sensor.start()
             self.sensors.append(sensor)
@@ -203,6 +227,13 @@ class SamplingCollector:
                 'activity': activity,
             })
 
+    def update_sensor_world_poses(self):
+        if not self.active or not self.manual_sensor_world_pose or self.ego_actor is None:
+            return
+
+        for sensor in self.sensors:
+            sensor.set_world_transform_from_parent(sensor.relative_transform())
+
     def capture_frame(self, snapshot):
         if not self.active:
             return
@@ -230,6 +261,16 @@ class SamplingCollector:
     def _record_ego_pose(self, snapshot):
         transform = self.ego_actor.get_transform()
         velocity = self.ego_actor.get_velocity()
+        logging.info(
+            'Sampling ego world pose frame=%06d loc=(%.3f, %.3f, %.3f) rot=(roll=%.3f, pitch=%.3f, yaw=%.3f)',
+            int(snapshot.frame),
+            transform.location.x,
+            transform.location.y,
+            transform.location.z,
+            transform.rotation.roll,
+            transform.rotation.pitch,
+            transform.rotation.yaw,
+        )
         self.ego_pose_rows.append({
             'frame': f'{snapshot.frame:06d}',
             'timestamp': f'{snapshot.timestamp.elapsed_seconds:.12f}',
@@ -269,6 +310,17 @@ class SamplingCollector:
     def _record_sensor_pose(self, frame_id):
         for sensor in self.sensors:
             transform = sensor.sensor.get_transform()
+            if sensor.name == 'CAM_FRONT':
+                logging.info(
+                    'Sampling CAM_FRONT world pose frame=%06d loc=(%.3f, %.3f, %.3f) rot=(roll=%.3f, pitch=%.3f, yaw=%.3f)',
+                    int(frame_id),
+                    transform.location.x,
+                    transform.location.y,
+                    transform.location.z,
+                    transform.rotation.roll,
+                    transform.rotation.pitch,
+                    transform.rotation.yaw,
+                )
             matrix = transform.get_matrix()
             for row in self.sensor_pose_rows:
                 if row['frame'] == f'{frame_id:06d}' and row['sensor_name'] == sensor.name:

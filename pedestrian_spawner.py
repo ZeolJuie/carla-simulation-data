@@ -66,13 +66,19 @@ class PedSpawnManager:
         jaywalking_weight = scenario_config.get('walker', {}).get('jaywalking_weight', 2)
         amount_random_peds = scenario_config.get('walker', {}).get('random_pedestrians', 0)
         self.route_rng = random.Random(self.ped_seed)
+        self.waypoint_distance = waypoint_distance
+        self.jaywalking_weight = jaywalking_weight
+        self.amount_random_peds = amount_random_peds
+        self.path_planner = None
 
         # set pedestrian seed
         self.carla_sim.world.set_pedestrians_seed(self.ped_seed)
 
-        # initialize pedestrian path planner
-        self.path_planner = PedPathPlanner(self.carla_sim.carla_map, waypoint_distance, jaywalking_weight)
         self.scene_catalog = self._load_scene_catalog_if_needed()
+        if self._needs_runtime_path_planner():
+            self._ensure_path_planner()
+        else:
+            logging.info('Skipping runtime PedPathPlanner initialization; scene-route data is sufficient for this case.')
         self.ped_index = 0
         self.group_index = 0
 
@@ -181,7 +187,7 @@ class PedSpawnManager:
                 # generate route or use manually defined waypoints depending on configuration
                 generate_route = spawn_point.get('generate_route')
                 if generate_route:
-                    waypoint_tuples = self.path_planner.generate_route(spawn_location, destination,
+                    waypoint_tuples = self._ensure_path_planner().generate_route(spawn_location, destination,
                                                                        GraphType[generate_route])
                     waypoints = np.array([w[0] for w in waypoint_tuples])
                     crossing_road_bools = [w[1] for w in waypoint_tuples]
@@ -240,6 +246,33 @@ class PedSpawnManager:
             return SceneCatalog.from_map_config(self.map_config)
         except SceneCatalogError as exc:
             raise ValueError(str(exc)) from exc
+
+    def _needs_runtime_path_planner(self):
+        if self.amount_random_peds > 0:
+            return True
+
+        ped_spawner_config = self.scenario_config.get('walker', {}).get('ped_spawner') or []
+        for spawn_point in ped_spawner_config:
+            if self._spawn_point_uses_scene_route(spawn_point):
+                continue
+            if spawn_point.get('generate_route'):
+                return True
+
+        return False
+
+    def _ensure_path_planner(self):
+        if self.path_planner is None:
+            logging.info(
+                'Initializing runtime PedPathPlanner waypoint_distance=%s jaywalking_weight=%s.',
+                self.waypoint_distance,
+                self.jaywalking_weight,
+            )
+            self.path_planner = PedPathPlanner(
+                self.carla_sim.carla_map,
+                self.waypoint_distance,
+                self.jaywalking_weight,
+            )
+        return self.path_planner
 
     @staticmethod
     def _spawn_point_uses_scene_route(spawn_point):
@@ -694,7 +727,7 @@ class PedSpawnManager:
         spawn_point = self.carla_sim.world.get_random_location_from_navigation()
         destination = self.carla_sim.world.get_random_location_from_navigation()
 
-        waypoint_tuples = self.path_planner.generate_route(spawn_point, destination, graph_type, with_origin=True)
+        waypoint_tuples = self._ensure_path_planner().generate_route(spawn_point, destination, graph_type, with_origin=True)
         np_spawn_loc = waypoint_tuples.pop(0)[0]
         waypoints = np.array([w[0] for w in waypoint_tuples])
         crossing_road_bools = [w[1] for w in waypoint_tuples]

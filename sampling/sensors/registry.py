@@ -22,6 +22,22 @@ SENSOR_CLASS_BY_TYPE = {
 }
 
 
-def create_sampling_sensor(world, blueprint_library, parent_actor, sensor_spec, sequence_manager, frame_stride):
+def create_sampling_sensor(
+    world,
+    blueprint_library,
+    parent_actor,
+    sensor_spec,
+    sequence_manager,
+    frame_stride,
+    attach_to_parent=True,
+):
     sensor_class = SENSOR_CLASS_BY_TYPE[sensor_spec['type']]
-    return sensor_class(world, blueprint_library, parent_actor, sensor_spec, sequence_manager, frame_stride)
+    return sensor_class(
+        world,
+        blueprint_library,
+        parent_actor,
+        sensor_spec,
+        sequence_manager,
+        frame_stride,
+        attach_to_parent=attach_to_parent,
+    )
