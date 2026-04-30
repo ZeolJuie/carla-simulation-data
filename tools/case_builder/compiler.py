@@ -13,9 +13,9 @@ class CaseCompilationError(ValueError):
 
 
 VEHICLE_DENSITY_CONFIG = {
-    "none": None,
-    "low": {"local_count": 8, "global_count": 16},
-    "medium": {"local_count": 12, "global_count": 32},
+    "low": {"local_count": 8, "global_count": 8},
+    "medium": {"local_count": 12, "global_count": 16},
+    "high": {"local_count": 16, "global_count": 24},
 }
 
 def instantiate_case(

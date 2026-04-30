@@ -13,7 +13,9 @@ from case_builder.models import ActorPlan, BuildRequest, CasePlan, CaseSkeleton
 
 
 SUPPORTED_GROUP_FORMATIONS = ("abreast", "follow")
-SUPPORTED_VEHICLE_DENSITIES = ("none", "low", "medium")
+SUPPORTED_VEHICLE_DENSITIES = ("low", "medium", "high")
+MAX_TOTAL_PEDESTRIANS = 16
+MAX_SPAWNER_COUNT = 16
 MAX_SUPPORT_GROUP_INTERVAL_BEFORE_EGO_S = 0.85
 EGO_DELAY_AFTER_LATEST_SUPPORT_RANGE_S = (1.0, 5.0)
 EGO_SPAWN_TIME_MAX_S = 12.0
@@ -59,7 +61,7 @@ class HeuristicSemanticPlanner:
 
         vehicle_density = rng.choices(
             population=list(SUPPORTED_VEHICLE_DENSITIES),
-            weights=[0.15, 0.40, 0.45] if skeleton.scene_kind == "crossing" else [0.30, 0.45, 0.25],
+            weights=[0.30, 0.40, 0.30],
             k=1,
         )[0]
         scenario_name = _scenario_name(request.scenario_prefix, skeleton, support_actors)
@@ -141,8 +143,8 @@ class OpenAICompatibleSemanticPlanner:
                             "available_support_routes": support_route_specs,
                             "allowed_vehicle_density": list(SUPPORTED_VEHICLE_DENSITIES),
                             "constraints": {
-                                "total_pedestrians_lt": 20,
-                                "spawner_count_lt": 20,
+                                "total_pedestrians_lte": MAX_TOTAL_PEDESTRIANS,
+                                "spawner_count_lte": MAX_SPAWNER_COUNT,
                                 "group_count_max": 5,
                                 "group_size_allowed": [2, 3],
                                 "ego_must_be_unique": True,
@@ -296,10 +298,10 @@ def _validate_plan(plan: CasePlan, *, skeleton: CaseSkeleton, inventory: Catalog
                 raise SemanticPlannerError("Grouped support actor requires a valid formation.")
             if actor.quantity not in (2, 3):
                 raise SemanticPlannerError("Grouped support actor quantity must be 2 or 3.")
-    if total_peds >= 20:
-        raise SemanticPlannerError("total pedestrians must stay below 20.")
-    if len(plan.support_actors) + 1 >= 20:
-        raise SemanticPlannerError("spawner count must stay below 20.")
+    if total_peds > MAX_TOTAL_PEDESTRIANS:
+        raise SemanticPlannerError(f"total pedestrians must stay at or below {MAX_TOTAL_PEDESTRIANS}.")
+    if len(plan.support_actors) + 1 > MAX_SPAWNER_COUNT:
+        raise SemanticPlannerError(f"spawner count must stay at or below {MAX_SPAWNER_COUNT}.")
     if group_count > 5:
         raise SemanticPlannerError("group count exceeds limit.")
 
@@ -414,9 +416,9 @@ def _behavior_phrase(behavior: str) -> str:
 
 def _vehicle_phrase(vehicle_density: str) -> str:
     return {
-        "none": "there is no background vehicle traffic",
         "low": "background vehicle traffic is light",
         "medium": "background vehicle traffic is moderate",
+        "high": "background vehicle traffic is heavy",
     }.get(vehicle_density, f"background vehicle traffic is {vehicle_density.replace('_', ' ')}")
 
 
@@ -547,7 +549,7 @@ def _build_support_actors(
     if fallback_same_route:
         available_routes = [skeleton.main_route]
 
-    target_total_peds = rng.randint(4, 10) if skeleton.scene_kind == "crossing" else rng.randint(3, 8)
+    target_total_peds = rng.randint(6, MAX_TOTAL_PEDESTRIANS) if skeleton.scene_kind == "crossing" else rng.randint(3, 10)
     remaining_peds = max(target_total_peds - 1, 1)
     max_groups = min(5, len(available_routes))
     support_actors: List[ActorPlan] = []
@@ -561,7 +563,7 @@ def _build_support_actors(
     group_count = 0
     spawn_time = 0.0
 
-    while remaining_peds > 0 and len(support_actors) < 8:
+    while remaining_peds > 0 and len(support_actors) < MAX_SPAWNER_COUNT - 1:
         candidate_routes = [route for route in available_routes if route.route_id not in used_routes]
         if fallback_same_route:
             candidate_routes = available_routes
@@ -571,7 +573,7 @@ def _build_support_actors(
         if non_overlapping_routes:
             candidate_routes = non_overlapping_routes
         if not candidate_routes:
-            break
+            candidate_routes = list(available_routes)
         route = rng.choice(candidate_routes)
         behavior = _weighted_choice(rng, route.supported_behaviors, preferred=_preferred_ego_behaviors(route.route_type))
 
@@ -622,18 +624,14 @@ def _build_sidewalk_support_actors(
     reverse_routes = [route for route in available_routes if _is_reverse_route(route.route_id)]
     forward_routes = [route for route in available_routes if not _is_reverse_route(route.route_id)]
 
-    target_total_peds = rng.choices(
-        population=[2, 3, 4, 5],
-        weights=[0.18, 0.34, 0.30, 0.18],
-        k=1,
-    )[0]
+    target_total_peds = rng.randint(3, 7)
     remaining_peds = max(target_total_peds - 1, 1)
     support_actors: List[ActorPlan] = []
-    spawn_time = rng.uniform(0.0, 2.0)
+    spawn_time = rng.uniform(0.0, 0.8)
     used_opposite_direction = False
 
-    while remaining_peds > 0 and len(support_actors) < 5:
-        if spawn_time > 7.2:
+    while remaining_peds > 0 and len(support_actors) < 9:
+        if spawn_time > 8.0:
             break
         route_pool = available_routes
         if not used_opposite_direction:
@@ -683,7 +681,11 @@ def _build_sidewalk_support_actors(
             )
         )
         remaining_peds -= quantity
-        spawn_time += rng.uniform(1.8, 3.2)
+        if remaining_peds > 0:
+            max_gap = max((8.0 - spawn_time) / remaining_peds, 0.35)
+            gap_low = max(0.35, min(1.2, max_gap * 0.55))
+            gap_high = max(gap_low, min(2.0, max_gap * 0.95))
+            spawn_time += rng.uniform(gap_low, gap_high)
 
     return support_actors
 

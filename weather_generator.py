@@ -628,12 +628,12 @@ DEFAULT_WEATHER_CONFIG = {
     'preset_jitter': {
         'enabled': True,
         'scale': 1.0,
-        'cloudiness_std': 3.0,
-        'precipitation_std': 3.0,
-        'precipitation_deposits_std': 4.0,
-        'wind_intensity_std': 3.0,
-        'wetness_std': 4.0,
-        'sun_altitude_std': 1.0,
+        'cloudiness_std': 6.0,
+        'precipitation_std': 6.0,
+        'precipitation_deposits_std': 8.0,
+        'wind_intensity_std': 6.0,
+        'wetness_std': 8.0,
+        'sun_altitude_std': 3.0,
     },
     'sun_altitude': {
         'weights': {
@@ -986,16 +986,18 @@ def _jitter_sun_altitude(rng, fields, config, category):
     if not jitter_cfg.get('enabled', True):
         return
     base_value = fields['sun_altitude_angle']
-    if base_value < -89.0:
-        return
     scale = float(jitter_cfg.get('scale', 1.0))
     std = float(jitter_cfg.get('sun_altitude_std', 0.0)) * scale
+    sun_cfg = config['sun_altitude']
     if category == 'day':
-        bounds = (40.0, 50.0)
+        bounds = _float_range(sun_cfg, 'day_range')
     elif category == 'sunset':
-        bounds = (12.0, 18.0)
+        bounds = _float_range(sun_cfg, 'low_sun_range')
     else:
-        bounds = (-90.0, -85.0)
+        bounds = _float_range(sun_cfg, 'night_range')
+        if base_value < bounds[0]:
+            fields['sun_altitude_angle'] = _uniform(rng, bounds)
+            return
     fields['sun_altitude_angle'] = _normal_clipped(rng, base_value, std, bounds)
 
 
