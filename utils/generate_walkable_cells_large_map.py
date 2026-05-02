@@ -4,6 +4,7 @@ import hashlib
 import heapq
 import json
 import math
+import random
 import statistics
 import subprocess
 import sys
@@ -188,6 +189,11 @@ DEFAULT_STATIC_OBSTACLE_FOOTPRINT_BUFFER_M = 0.1
 DEFAULT_VEGETATION_MAX_HEIGHT_M = 2.5
 DEFAULT_EDGE_CORRIDOR_SIDE_MARGIN_M = 0.15
 DEFAULT_EDGE_MIN_PASSAGE_WIDTH_M = 0.9
+DEFAULT_SIDEWALK_INWARD_OFFSET_MAX_M = 2.0
+SIDEWALK_INWARD_OFFSET_MIN_M = 0.05
+SIDEWALK_INWARD_OFFSET_BORDER_MARGIN_M = 0.2
+SIDEWALK_INWARD_OFFSET_PATH_CLEARANCE_M = 0.2
+SIDEWALK_INWARD_OFFSET_ATTEMPT_SCALES = (1.0, 0.5, 0.25)
 STATIC_OBSTACLE_ENDPOINT_ANCHOR_RADIUS_M = 0.18
 ROUTE_SPAWN_Z_OFFSET_M = 0.2
 DEFAULT_TILE_CATALOG_PATH = Path("tmp") / "town12_sidewalk_tiles" / "tile_catalog.json"
@@ -1894,6 +1900,211 @@ def crossing_bools_for_path(path_edge_ids: List[int], edges: Dict[int, EdgeRecor
     return [False] + [edges[edge_id].edge_type in crossing_edge_types for edge_id in path_edge_ids]
 
 
+def polyline_tangent_vectors(points_xyz: Sequence[Sequence[float]]) -> np.ndarray:
+    points = np.array(points_xyz, dtype=float)
+    tangent_vectors = np.zeros((len(points), 2), dtype=float)
+    for index in range(len(points)):
+        if index == 0:
+            delta = points[1, :2] - points[0, :2]
+        elif index == len(points) - 1:
+            delta = points[-1, :2] - points[-2, :2]
+        else:
+            delta = points[index + 1, :2] - points[index - 1, :2]
+        delta_norm = float(np.linalg.norm(delta))
+        tangent_vectors[index] = np.array([1.0, 0.0], dtype=float) if delta_norm <= 1e-6 else delta / delta_norm
+    return tangent_vectors
+
+
+def shift_polyline_laterally(points_xyz: Sequence[Sequence[float]], signed_offset_m: float) -> np.ndarray:
+    points = np.array(points_xyz, dtype=float, copy=True)
+    if len(points) < 2 or abs(signed_offset_m) <= 1e-6:
+        return points
+    tangent_vectors = polyline_tangent_vectors(points)
+    lateral_vectors = np.column_stack((-tangent_vectors[:, 1], tangent_vectors[:, 0]))
+    points[:, :2] += lateral_vectors * float(signed_offset_m)
+    return points
+
+
+def safe_get_waypoint(
+    carla_map: carla.Map,
+    location: carla.Location,
+    *,
+    project_to_road: bool,
+    lane_type: carla.LaneType,
+):
+    try:
+        return carla_map.get_waypoint(location, project_to_road=project_to_road, lane_type=lane_type)
+    except RuntimeError:
+        return None
+
+
+def first_driving_lane_from_sidewalk(sidewalk_waypoint, use_left: bool):
+    lane = sidewalk_waypoint
+    visited = set()
+    while lane is not None:
+        lane = lane.get_left_lane() if use_left else lane.get_right_lane()
+        if lane is None:
+            return None
+        lane_key = (int(lane.road_id), int(lane.section_id), int(lane.lane_id))
+        if lane_key in visited:
+            return None
+        visited.add(lane_key)
+        if lane.lane_type == carla.LaneType.Driving:
+            return lane
+    return None
+
+
+def sidewalk_inward_offset_sign_and_limit(
+    path_waypoints: Sequence[Sequence[float]],
+    carla_map: carla.Map,
+) -> Optional[Tuple[float, float]]:
+    points = np.array(path_waypoints, dtype=float)
+    tangents = polyline_tangent_vectors(points)
+    inward_sign_votes: List[float] = []
+    max_offsets: List[float] = []
+
+    for point, tangent in zip(points, tangents):
+        location = carla.Location(
+            x=float(point[0]),
+            y=float(point[1]),
+            z=float(point[2]) if len(point) > 2 else 0.0,
+        )
+        sidewalk_waypoint = safe_get_waypoint(
+            carla_map,
+            location,
+            project_to_road=True,
+            lane_type=carla.LaneType.Sidewalk,
+        )
+        if sidewalk_waypoint is None or sidewalk_waypoint.lane_type != carla.LaneType.Sidewalk:
+            continue
+
+        driving_candidates = []
+        for use_left in (True, False):
+            driving_waypoint = first_driving_lane_from_sidewalk(sidewalk_waypoint, use_left=use_left)
+            if driving_waypoint is None:
+                continue
+            driving_candidates.append(
+                np.array(
+                    [
+                        float(driving_waypoint.transform.location.x),
+                        float(driving_waypoint.transform.location.y),
+                    ],
+                    dtype=float,
+                )
+            )
+        if not driving_candidates:
+            continue
+
+        point_xy = np.array(point[:2], dtype=float)
+        driving_xy = min(driving_candidates, key=lambda candidate: float(np.linalg.norm(candidate - point_xy)))
+        left_normal = np.array([-tangent[1], tangent[0]], dtype=float)
+        side = float(np.dot(driving_xy - point_xy, left_normal))
+        if abs(side) <= 1e-6:
+            continue
+
+        inward_sign_votes.append(-1.0 if side > 0.0 else 1.0)
+        max_offsets.append(max(0.0, float(sidewalk_waypoint.lane_width) * 1 - SIDEWALK_INWARD_OFFSET_BORDER_MARGIN_M))
+
+    if not inward_sign_votes or not max_offsets:
+        return None
+
+    max_offset_m = min(DEFAULT_SIDEWALK_INWARD_OFFSET_MAX_M, min(max_offsets))
+    if max_offset_m < SIDEWALK_INWARD_OFFSET_MIN_M:
+        return None
+
+    inward_sign = 1.0 if sum(inward_sign_votes) > 0.0 else -1.0
+    return inward_sign, float(max_offset_m)
+
+
+def shifted_sidewalk_route_is_valid(
+    shifted_points: np.ndarray,
+    obstacle_records: Sequence[StaticObstacleRecord],
+    carla_map: carla.Map,
+) -> bool:
+    for point in shifted_points:
+        location = carla.Location(
+            x=float(point[0]),
+            y=float(point[1]),
+            z=float(point[2]) if len(point) > 2 else 0.0,
+        )
+        sidewalk_waypoint = safe_get_waypoint(
+            carla_map,
+            location,
+            project_to_road=False,
+            lane_type=carla.LaneType.Sidewalk,
+        )
+        if sidewalk_waypoint is None or sidewalk_waypoint.lane_type != carla.LaneType.Sidewalk:
+            return False
+
+    route_buffer = LineString([(float(point[0]), float(point[1])) for point in shifted_points]).buffer(
+        SIDEWALK_INWARD_OFFSET_PATH_CLEARANCE_M,
+        resolution=8,
+    ).buffer(0.0)
+    if route_buffer.is_empty:
+        return False
+
+    for obstacle_record in relevant_obstacles_for_bounds(obstacle_records, route_buffer.bounds):
+        if obstacle_record.buffered_footprint.intersects(route_buffer):
+            return False
+    return True
+
+
+def apply_sidewalk_inward_offset_to_route(
+    route: Dict[str, object],
+    obstacle_records: Sequence[StaticObstacleRecord],
+    carla_map: carla.Map,
+) -> Dict[str, object]:
+    if str(route.get('route_type')) != 'sidewalk_through':
+        return route
+
+    path_waypoints = route.get('path_waypoints')
+    if not isinstance(path_waypoints, list) or len(path_waypoints) < 2:
+        return route
+
+    inward_config = sidewalk_inward_offset_sign_and_limit(path_waypoints, carla_map)
+    if inward_config is None:
+        return route
+    inward_sign, max_offset_m = inward_config
+
+    route_id = str(route.get('route_id', ''))
+    offset_seed = int(hashlib.sha1(route_id.encode('utf-8')).hexdigest()[:16], 16)
+    sampled_offset_m = random.Random(offset_seed).uniform(0.0, max_offset_m)
+    if sampled_offset_m < SIDEWALK_INWARD_OFFSET_MIN_M:
+        return route
+
+    for scale in SIDEWALK_INWARD_OFFSET_ATTEMPT_SCALES:
+        applied_offset_m = sampled_offset_m * float(scale)
+        shifted_points = shift_polyline_laterally(path_waypoints, inward_sign * applied_offset_m)
+        if not shifted_sidewalk_route_is_valid(shifted_points, obstacle_records, carla_map):
+            continue
+
+        shifted_waypoints = [rounded_point((float(point[0]), float(point[1]), float(point[2]))) for point in shifted_points]
+        next_point = shifted_waypoints[1] if len(shifted_waypoints) > 1 else shifted_waypoints[0]
+        spawn_transform = snap_route_spawn_transform(carla_map, shifted_waypoints[0], next_point)
+
+        adjusted_route = dict(route)
+        adjusted_route['path_waypoints'] = shifted_waypoints
+        adjusted_route['spawn_location'] = spawn_transform['location']
+        adjusted_route['spawn_transform'] = spawn_transform
+        adjusted_route['destination'] = shifted_waypoints[-1]
+        adjusted_route['config_waypoints'] = shifted_waypoints[1:-1]
+        adjusted_attributes = dict(route.get('attributes', {}))
+        adjusted_attributes['sidewalk_inward_offset_m'] = round(applied_offset_m, 3)
+        adjusted_attributes['sidewalk_inward_offset_side'] = 'left' if inward_sign > 0.0 else 'right'
+        adjusted_route['attributes'] = adjusted_attributes
+        return adjusted_route
+
+    return route
+
+
+def apply_sidewalk_inward_offsets(
+    routes: List[Dict[str, object]],
+    obstacle_records: Sequence[StaticObstacleRecord],
+    carla_map: carla.Map,
+) -> List[Dict[str, object]]:
+    return [apply_sidewalk_inward_offset_to_route(route, obstacle_records, carla_map) for route in routes]
+
+
 def build_route_record(
     route_id: str,
     route_type: str,
@@ -2150,6 +2361,22 @@ def rejected_route_record(
     }
 
 
+def route_with_validation_metadata(
+    route: Dict[str, object],
+    raw_route: Dict[str, object],
+    status: str,
+    blocked_edge_ids: Sequence[int],
+) -> Dict[str, object]:
+    validated_route = dict(route)
+    validated_route["validation"] = {
+        "status": status,
+        "raw_route_type": str(raw_route["route_type"]),
+        "raw_route_length_m": float(raw_route["route_length_m"]),
+        "blocked_edge_ids": list(blocked_edge_ids),
+    }
+    return validated_route
+
+
 def validate_routes_against_static_obstacles(
     cell_kind: str,
     routes: List[Dict[str, object]],
@@ -2159,6 +2386,7 @@ def validate_routes_against_static_obstacles(
     edge_lookup: Dict[Tuple[int, int], int],
     node_locations: Dict[int, Tuple[float, float, float]],
     blocked_edge_records: Dict[int, BlockedEdgeRecord],
+    obstacle_records: Sequence[StaticObstacleRecord],
     carla_map: carla.Map,
 ) -> Tuple[List[Dict[str, object]], Dict[str, object]]:
     blocked_edge_id_set = set(blocked_edge_records)
@@ -2184,6 +2412,23 @@ def validate_routes_against_static_obstacles(
                     "blocked_edge_ids": blocked_edge_ids,
                     "rejection_reason": "portal_definition_missing",
                     "validated_route": None,
+                }
+            )
+            continue
+
+        inward_shifted_route = apply_sidewalk_inward_offset_to_route(route, obstacle_records, carla_map)
+        if inward_shifted_route is not route:
+            route_evaluations.append(
+                {
+                    "raw_route": route,
+                    "blocked_edge_ids": blocked_edge_ids,
+                    "rejection_reason": None,
+                    "validated_route": route_with_validation_metadata(
+                        inward_shifted_route,
+                        route,
+                        "retained_as_is",
+                        blocked_edge_ids,
+                    ),
                 }
             )
             continue
@@ -2222,18 +2467,18 @@ def validate_routes_against_static_obstacles(
             if validation_status != "retained_as_is"
             else str(route.get("path_source", "shortest_path")),
         )
-        validated_route["validation"] = {
-            "status": validation_status,
-            "raw_route_type": str(route["route_type"]),
-            "raw_route_length_m": float(route["route_length_m"]),
-            "blocked_edge_ids": blocked_edge_ids,
-        }
+        validated_route = apply_sidewalk_inward_offset_to_route(validated_route, obstacle_records, carla_map)
         route_evaluations.append(
             {
                 "raw_route": route,
                 "blocked_edge_ids": blocked_edge_ids,
                 "rejection_reason": None,
-                "validated_route": validated_route,
+                "validated_route": route_with_validation_metadata(
+                    validated_route,
+                    route,
+                    validation_status,
+                    blocked_edge_ids,
+                ),
             }
         )
 
@@ -3166,6 +3411,7 @@ def attach_routes_to_cells(
             edge_lookup=edge_lookup,
             node_locations=node_locations,
             blocked_edge_records=blocked_edge_records,
+            obstacle_records=cell_obstacle_records,
             carla_map=carla_map,
         )
         obstacle_counts_by_label: Dict[str, int] = defaultdict(int)
@@ -4089,6 +4335,8 @@ def main() -> None:
         return
 
     target_tiles = list(tile_catalog["tiles"])
+    # NOTICE: tile太多了, 挑几个生成
+    target_tiles = target_tiles[::10]
     print(f"map_name={map_name}")
     print(f"requested_map_name={requested_map_name}")
     print(f"xodr_path={xodr_path}")
