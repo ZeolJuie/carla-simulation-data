@@ -1,5 +1,6 @@
 import argparse
 import colorsys
+import hashlib
 import heapq
 import json
 import math
@@ -141,12 +142,45 @@ CROSSING_ROUTE_TYPE_PRIORITY = [
 
 STATIC_OBSTACLE_LABEL_ALIASES = {
     "Walls": ("Walls", "Wall"),
-    "Fences": ("Fences", "Fence", "GuardRail"),
+    "Fences": ("Fences", "Fence"),
+    "GuardRail": ("GuardRail",),
     "Static": ("Static",),
     "Other": ("Other",),
     "Vegetation": ("Vegetation",),
+    "Poles": ("Poles",),
+    "TrafficLight": ("TrafficLight",),
+    "TrafficSigns": ("TrafficSigns", "TrafficSign"),
+    "Buildings": ("Buildings", "Building"),
+    "Bridge": ("Bridge",),
+    "RailTrack": ("RailTrack",),
+    "Car": ("Car",),
+    "Truck": ("Truck",),
+    "Bus": ("Bus",),
+    "Motorcycle": ("Motorcycle",),
+    "Bicycle": ("Bicycle",),
+    "Train": ("Train",),
+    "Vehicles": ("Vehicles", "Car", "Truck", "Bus", "Motorcycle", "Bicycle", "Train"),
 }
-DEFAULT_STATIC_OBSTACLE_LABELS = ("Walls", "Fences", "Static", "Other", "Vegetation")
+DEFAULT_STATIC_OBSTACLE_LABELS = (
+    "Walls",
+    "Fences",
+    "GuardRail",
+    "Static",
+    "Other",
+    "Vegetation",
+    "Poles",
+    "TrafficLight",
+    "TrafficSigns",
+    "Buildings",
+    "Bridge",
+    "RailTrack",
+    "Car",
+    "Truck",
+    "Bus",
+    "Motorcycle",
+    "Bicycle",
+    "Train",
+)
 DEFAULT_STATIC_OBSTACLE_MAX_BOTTOM_Z_M = 0.35
 DEFAULT_STATIC_OBSTACLE_MIN_AREA_M2 = 0.08
 DEFAULT_STATIC_OBSTACLE_MIN_SPAN_M = 0.12
@@ -238,6 +272,15 @@ class StaticObstacleValidationConfig:
             "edge_min_passage_width_m": round(self.edge_min_passage_width_m, 3),
             "edge_block_rule": "corridor_endpoint_connectivity",
         }
+
+
+@dataclass(frozen=True)
+class StaticObstacleGeometrySource:
+    object_id: int
+    canonical_label_name: str
+    source_label_name: str
+    bounding_box: carla.BoundingBox
+    transform: Optional[carla.Transform]
 
 
 @dataclass(frozen=True)
@@ -369,8 +412,22 @@ def tile_center(bounds: Sequence[float]) -> carla.Location:
     return carla.Location(x=(min_x + max_x) * 0.5, y=(min_y + max_y) * 0.5, z=0.0)
 
 
+def nearest_ground_height_from_waypoint(carla_map: carla.Map, location: carla.Location) -> Optional[float]:
+    for lane_type in (carla.LaneType.Sidewalk, carla.LaneType.Driving, carla.LaneType.Any):
+        try:
+            waypoint = carla_map.get_waypoint(location, project_to_road=True, lane_type=lane_type)
+        except RuntimeError:
+            waypoint = None
+        if waypoint is not None:
+            return float(waypoint.transform.location.z)
+    return None
+
+
 def nearest_waypoint_height(world: carla.World, center: carla.Location) -> float:
     carla_map = world.get_map()
+    ground_height = nearest_ground_height_from_waypoint(carla_map, center)
+    if ground_height is not None:
+        return ground_height
     for lane_type in (carla.LaneType.Sidewalk, carla.LaneType.Driving, carla.LaneType.Any):
         waypoint = carla_map.get_waypoint(center, lane_type=lane_type)
         if waypoint is not None:
@@ -637,6 +694,81 @@ def oriented_box_polygon(center_x: float, center_y: float, yaw_deg: float, exten
     return Polygon([(float(point[0]), float(point[1])) for point in corners])
 
 
+def bounding_box_contains_location(
+    bounding_box,
+    location: carla.Location,
+    transform: carla.Transform,
+) -> bool:
+    diff = bounding_box.location - location
+    diff = transform.transform(diff)
+    return (
+        abs(float(diff.x)) < float(bounding_box.extent.x)
+        and abs(float(diff.y)) < float(bounding_box.extent.y)
+        and abs(float(diff.z)) < float(bounding_box.extent.z)
+    )
+
+
+def bounding_box_reference_transform(
+    bounding_box,
+    transform: Optional[carla.Transform],
+) -> carla.Transform:
+    if transform is None:
+        return carla.Transform(
+            carla.Location(
+                x=float(bounding_box.location.x),
+                y=float(bounding_box.location.y),
+                z=float(bounding_box.location.z),
+            ),
+            bounding_box.rotation,
+        )
+
+    candidate_location = transform.location + (bounding_box.location - transform.location) * 0.1
+    inverse_bbox_rotation = carla.Transform(
+        rotation=carla.Rotation(
+            pitch=-float(bounding_box.rotation.pitch),
+            yaw=-float(bounding_box.rotation.yaw),
+            roll=-float(bounding_box.rotation.roll),
+        )
+    )
+    if bounding_box_contains_location(bounding_box, candidate_location, inverse_bbox_rotation):
+        return carla.Transform(
+            carla.Location(
+                x=float(transform.location.x),
+                y=float(transform.location.y),
+                z=float(bounding_box.location.z),
+            ),
+            transform.rotation,
+        )
+    return carla.Transform(
+        carla.Location(
+            x=float(bounding_box.location.x),
+            y=float(bounding_box.location.y),
+            z=float(bounding_box.location.z),
+        ),
+        bounding_box.rotation,
+    )
+
+
+def bounding_box_polygon_from_transform(
+    bounding_box,
+    transform: carla.Transform,
+) -> Tuple[Polygon, float, float]:
+    polygon = oriented_box_polygon(
+        center_x=float(transform.location.x),
+        center_y=float(transform.location.y),
+        yaw_deg=float(transform.rotation.yaw),
+        extent_x=float(bounding_box.extent.x),
+        extent_y=float(bounding_box.extent.y),
+    )
+    bottom_z = float(bounding_box.location.z - bounding_box.extent.z)
+    top_z = float(bounding_box.location.z + bounding_box.extent.z)
+    return polygon.buffer(0.0), bottom_z, top_z
+
+
+def environment_object_reference_transform(env_object) -> carla.Transform:
+    return bounding_box_reference_transform(env_object.bounding_box, env_object.transform)
+
+
 def environment_object_world_vertex_footprint_polygon(env_object) -> Tuple[Polygon, float, float]:
     world_vertices = environment_object_world_vertices(env_object)
     points_xy = [(float(vertex.x), float(vertex.y)) for vertex in world_vertices]
@@ -647,32 +779,21 @@ def environment_object_world_vertex_footprint_polygon(env_object) -> Tuple[Polyg
 
 
 def environment_object_transform_bbox_polygon(env_object) -> Tuple[Polygon, float, float]:
-    bounding_box = env_object.bounding_box
-    transform = env_object.transform
-    polygon = oriented_box_polygon(
-        center_x=float(transform.location.x),
-        center_y=float(transform.location.y),
-        yaw_deg=float(transform.rotation.yaw),
-        extent_x=float(bounding_box.extent.x),
-        extent_y=float(bounding_box.extent.y),
-    )
-    bottom_z = float(transform.location.z - bounding_box.extent.z)
-    top_z = float(transform.location.z + bounding_box.extent.z)
-    return polygon.buffer(0.0), bottom_z, top_z
+    return bounding_box_polygon_from_transform(env_object.bounding_box, environment_object_reference_transform(env_object))
 
 
 def environment_object_bbox_center_polygon(env_object) -> Tuple[Polygon, float, float]:
-    bounding_box = env_object.bounding_box
-    polygon = oriented_box_polygon(
-        center_x=float(bounding_box.location.x),
-        center_y=float(bounding_box.location.y),
-        yaw_deg=float(bounding_box.rotation.yaw),
-        extent_x=float(bounding_box.extent.x),
-        extent_y=float(bounding_box.extent.y),
+    return bounding_box_polygon_from_transform(
+        env_object.bounding_box,
+        carla.Transform(
+            carla.Location(
+                x=float(env_object.bounding_box.location.x),
+                y=float(env_object.bounding_box.location.y),
+                z=float(env_object.bounding_box.location.z),
+            ),
+            env_object.bounding_box.rotation,
+        ),
     )
-    bottom_z = float(bounding_box.location.z - bounding_box.extent.z)
-    top_z = float(bounding_box.location.z + bounding_box.extent.z)
-    return polygon.buffer(0.0), bottom_z, top_z
 
 
 def environment_object_footprint_polygon(env_object) -> Tuple[Polygon, float, float]:
@@ -682,11 +803,61 @@ def environment_object_footprint_polygon(env_object) -> Tuple[Polygon, float, fl
     return environment_object_bbox_center_polygon(env_object)
 
 
-def iter_environment_objects_for_labels(
+def environment_object_ground_probe_location(env_object) -> carla.Location:
+    return environment_object_reference_transform(env_object).location
+
+
+def static_obstacle_source_reference_transform(source: StaticObstacleGeometrySource) -> carla.Transform:
+    return bounding_box_reference_transform(source.bounding_box, source.transform)
+
+
+def static_obstacle_source_footprint_polygon(source: StaticObstacleGeometrySource) -> Tuple[Polygon, float, float]:
+    return bounding_box_polygon_from_transform(source.bounding_box, static_obstacle_source_reference_transform(source))
+
+
+def static_obstacle_source_ground_probe_location(source: StaticObstacleGeometrySource) -> carla.Location:
+    return static_obstacle_source_reference_transform(source).location
+
+
+def static_obstacle_source_geometry_key(
+    canonical_label_name: str,
+    bounding_box,
+) -> Tuple[object, ...]:
+    return (
+        canonical_label_name,
+        round(float(bounding_box.location.x), 3),
+        round(float(bounding_box.location.y), 3),
+        round(float(bounding_box.location.z), 3),
+        round(float(bounding_box.extent.x), 3),
+        round(float(bounding_box.extent.y), 3),
+        round(float(bounding_box.extent.z), 3),
+        round(float(bounding_box.rotation.pitch), 3),
+        round(float(bounding_box.rotation.yaw), 3),
+        round(float(bounding_box.rotation.roll), 3),
+    )
+
+
+def synthetic_level_bbox_object_id(
+    source_label_name: str,
+    bbox_index: int,
+    bounding_box,
+) -> int:
+    digest = hashlib.sha1(
+        (
+            f"{source_label_name}|{bbox_index}|"
+            f"{float(bounding_box.location.x):.6f}|{float(bounding_box.location.y):.6f}|{float(bounding_box.location.z):.6f}|"
+            f"{float(bounding_box.extent.x):.6f}|{float(bounding_box.extent.y):.6f}|{float(bounding_box.extent.z):.6f}|"
+            f"{float(bounding_box.rotation.pitch):.6f}|{float(bounding_box.rotation.yaw):.6f}|{float(bounding_box.rotation.roll):.6f}"
+        ).encode("utf-8")
+    ).hexdigest()
+    return -int(digest[:15], 16)
+
+
+def iter_static_obstacle_sources_for_labels(
     carla_world: carla.World,
     label_names: Sequence[str],
-) -> List[Tuple[object, str, str]]:
-    objects_by_id: Dict[int, Tuple[object, str, str]] = {}
+) -> List[StaticObstacleGeometrySource]:
+    sources_by_key: Dict[Tuple[object, ...], StaticObstacleGeometrySource] = {}
     for canonical_label_name in label_names:
         aliases = STATIC_OBSTACLE_LABEL_ALIASES.get(canonical_label_name, (canonical_label_name,))
         for source_label_name in aliases:
@@ -694,8 +865,31 @@ def iter_environment_objects_for_labels(
             if label is None:
                 continue
             for env_object in carla_world.get_environment_objects(label):
-                objects_by_id[env_object.id] = (env_object, canonical_label_name, source_label_name)
-    return list(objects_by_id.values())
+                source = StaticObstacleGeometrySource(
+                    object_id=int(env_object.id),
+                    canonical_label_name=canonical_label_name,
+                    source_label_name=source_label_name,
+                    bounding_box=env_object.bounding_box,
+                    transform=env_object.transform,
+                )
+                key = static_obstacle_source_geometry_key(canonical_label_name, source.bounding_box)
+                sources_by_key.setdefault(key, source)
+            try:
+                level_bboxes = list(carla_world.get_level_bbs(label))
+            except RuntimeError:
+                level_bboxes = []
+            for bbox_index, bounding_box in enumerate(level_bboxes):
+                key = static_obstacle_source_geometry_key(canonical_label_name, bounding_box)
+                if key in sources_by_key:
+                    continue
+                sources_by_key[key] = StaticObstacleGeometrySource(
+                    object_id=synthetic_level_bbox_object_id(source_label_name, bbox_index, bounding_box),
+                    canonical_label_name=canonical_label_name,
+                    source_label_name=f"level_bbs:{source_label_name}",
+                    bounding_box=bounding_box,
+                    transform=None,
+                )
+    return list(sources_by_key.values())
 
 
 def extract_static_obstacle_records(
@@ -703,20 +897,21 @@ def extract_static_obstacle_records(
     config: StaticObstacleValidationConfig,
 ) -> List[StaticObstacleRecord]:
     obstacle_records: List[StaticObstacleRecord] = []
-    for env_object, canonical_label_name, source_label_name in iter_environment_objects_for_labels(
-        carla_world,
-        config.label_names,
-    ):
-        raw_footprint, bottom_z, top_z = environment_object_footprint_polygon(env_object)
+    carla_map = carla_world.get_map()
+    for source in iter_static_obstacle_sources_for_labels(carla_world, config.label_names):
+        raw_footprint, bottom_z, top_z = static_obstacle_source_footprint_polygon(source)
         raw_footprint = raw_footprint.buffer(0.0)
         if raw_footprint.is_empty:
             continue
 
-        if bottom_z > config.max_bottom_z_m + 1e-6:
+        ground_z = nearest_ground_height_from_waypoint(carla_map, static_obstacle_source_ground_probe_location(source))
+        if ground_z is None:
+            continue
+        if bottom_z - ground_z > config.max_bottom_z_m + 1e-6:
             continue
 
         height_m = max(0.0, top_z - bottom_z)
-        if canonical_label_name == "Vegetation" and height_m > config.vegetation_max_height_m + 1e-6:
+        if source.canonical_label_name == "Vegetation" and height_m > config.vegetation_max_height_m + 1e-6:
             continue
 
         min_x, min_y, max_x, max_y = raw_footprint.bounds
@@ -733,9 +928,9 @@ def extract_static_obstacle_records(
 
         obstacle_records.append(
             StaticObstacleRecord(
-                object_id=int(env_object.id),
-                label_name=canonical_label_name,
-                source_label_name=source_label_name,
+                object_id=int(source.object_id),
+                label_name=source.canonical_label_name,
+                source_label_name=source.source_label_name,
                 height_m=float(height_m),
                 bottom_z=float(bottom_z),
                 raw_footprint=raw_footprint,
@@ -3615,7 +3810,7 @@ def parse_args() -> argparse.Namespace:
         "--obstacle-max-bottom-z",
         default=DEFAULT_STATIC_OBSTACLE_MAX_BOTTOM_Z_M,
         type=float,
-        help="Keep only obstacle footprints whose bottom z is at or below this threshold [m]",
+        help="Keep only obstacle footprints whose bottom clearance above nearby ground is at or below this threshold [m]",
     )
     parser.add_argument(
         "--obstacle-min-area",
@@ -3664,7 +3859,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-static-obstacles",
         action="store_true",
-        help="Reserved for compatibility. Tile mode currently skips static obstacle pruning by default.",
+        help="Skip static environment object extraction and obstacle pruning during tile export.",
     )
     parser.add_argument(
         "--tile-catalog",
@@ -3691,7 +3886,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--tile-size",
-        default=600.0,
+        default=400.0,
         type=float,
         help="Tile core size [m].",
     )
@@ -3768,7 +3963,7 @@ def process_single_tile(
         tile_record=tile_record,
         tile_catalog_path=tile_catalog_path,
         static_obstacle_validation_config=static_obstacle_validation_config,
-        skip_static_obstacles=True,
+        skip_static_obstacles=args.skip_static_obstacles,
     )
 
     print(f"map_name={map_name}")

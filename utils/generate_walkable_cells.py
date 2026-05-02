@@ -138,12 +138,45 @@ CROSSING_ROUTE_TYPE_PRIORITY = [
 
 STATIC_OBSTACLE_LABEL_ALIASES = {
     "Walls": ("Walls", "Wall"),
-    "Fences": ("Fences", "Fence", "GuardRail"),
+    "Fences": ("Fences", "Fence"),
+    "GuardRail": ("GuardRail",),
     "Static": ("Static",),
     "Other": ("Other",),
     "Vegetation": ("Vegetation",),
+    "Poles": ("Poles",),
+    "TrafficLight": ("TrafficLight",),
+    "TrafficSigns": ("TrafficSigns", "TrafficSign"),
+    "Buildings": ("Buildings", "Building"),
+    "Bridge": ("Bridge",),
+    "RailTrack": ("RailTrack",),
+    "Car": ("Car",),
+    "Truck": ("Truck",),
+    "Bus": ("Bus",),
+    "Motorcycle": ("Motorcycle",),
+    "Bicycle": ("Bicycle",),
+    "Train": ("Train",),
+    "Vehicles": ("Vehicles", "Car", "Truck", "Bus", "Motorcycle", "Bicycle", "Train"),
 }
-DEFAULT_STATIC_OBSTACLE_LABELS = ("Walls", "Fences", "Static", "Other", "Vegetation")
+DEFAULT_STATIC_OBSTACLE_LABELS = (
+    "Walls",
+    "Fences",
+    "GuardRail",
+    "Static",
+    "Other",
+    "Vegetation",
+    "Poles",
+    "TrafficLight",
+    "TrafficSigns",
+    "Buildings",
+    "Bridge",
+    "RailTrack",
+    "Car",
+    "Truck",
+    "Bus",
+    "Motorcycle",
+    "Bicycle",
+    "Train",
+)
 DEFAULT_STATIC_OBSTACLE_MAX_BOTTOM_Z_M = 0.35
 DEFAULT_STATIC_OBSTACLE_MIN_AREA_M2 = 0.08
 DEFAULT_STATIC_OBSTACLE_MIN_SPAN_M = 0.12
@@ -344,6 +377,17 @@ def apply_large_map_safe_settings(world: carla.World) -> None:
     time.sleep(1.0)
 
 
+def nearest_ground_height_from_waypoint(carla_map: carla.Map, location: carla.Location) -> Optional[float]:
+    for lane_type in (carla.LaneType.Sidewalk, carla.LaneType.Driving, carla.LaneType.Any):
+        try:
+            waypoint = carla_map.get_waypoint(location, project_to_road=True, lane_type=lane_type)
+        except RuntimeError:
+            waypoint = None
+        if waypoint is not None:
+            return float(waypoint.transform.location.z)
+    return None
+
+
 def build_node_locations(path_planner: PedPathPlanner) -> Dict[int, Tuple[float, float, float]]:
     node_locations: Dict[int, Tuple[float, float, float]] = {}
     for node_id, data in path_planner.graph.nodes(data=True):
@@ -499,6 +543,50 @@ def oriented_box_polygon(center_x: float, center_y: float, yaw_deg: float, exten
     return Polygon([(float(point[0]), float(point[1])) for point in corners])
 
 
+def bounding_box_contains_location(
+    bounding_box,
+    location: carla.Location,
+    transform: carla.Transform,
+) -> bool:
+    diff = bounding_box.location - location
+    diff = transform.transform(diff)
+    return (
+        abs(float(diff.x)) < float(bounding_box.extent.x)
+        and abs(float(diff.y)) < float(bounding_box.extent.y)
+        and abs(float(diff.z)) < float(bounding_box.extent.z)
+    )
+
+
+def environment_object_reference_transform(env_object) -> carla.Transform:
+    bounding_box = env_object.bounding_box
+    transform = env_object.transform
+    candidate_location = transform.location + (bounding_box.location - transform.location) * 0.1
+    inverse_bbox_rotation = carla.Transform(
+        rotation=carla.Rotation(
+            pitch=-float(bounding_box.rotation.pitch),
+            yaw=-float(bounding_box.rotation.yaw),
+            roll=-float(bounding_box.rotation.roll),
+        )
+    )
+    if bounding_box_contains_location(bounding_box, candidate_location, inverse_bbox_rotation):
+        return carla.Transform(
+            carla.Location(
+                x=float(transform.location.x),
+                y=float(transform.location.y),
+                z=float(bounding_box.location.z),
+            ),
+            transform.rotation,
+        )
+    return carla.Transform(
+        carla.Location(
+            x=float(bounding_box.location.x),
+            y=float(bounding_box.location.y),
+            z=float(bounding_box.location.z),
+        ),
+        bounding_box.rotation,
+    )
+
+
 def environment_object_world_vertex_footprint_polygon(env_object) -> Tuple[Polygon, float, float]:
     world_vertices = environment_object_world_vertices(env_object)
     points_xy = [(float(vertex.x), float(vertex.y)) for vertex in world_vertices]
@@ -510,7 +598,7 @@ def environment_object_world_vertex_footprint_polygon(env_object) -> Tuple[Polyg
 
 def environment_object_transform_bbox_polygon(env_object) -> Tuple[Polygon, float, float]:
     bounding_box = env_object.bounding_box
-    transform = env_object.transform
+    transform = environment_object_reference_transform(env_object)
     polygon = oriented_box_polygon(
         center_x=float(transform.location.x),
         center_y=float(transform.location.y),
@@ -518,8 +606,8 @@ def environment_object_transform_bbox_polygon(env_object) -> Tuple[Polygon, floa
         extent_x=float(bounding_box.extent.x),
         extent_y=float(bounding_box.extent.y),
     )
-    bottom_z = float(transform.location.z - bounding_box.extent.z)
-    top_z = float(transform.location.z + bounding_box.extent.z)
+    bottom_z = float(bounding_box.location.z - bounding_box.extent.z)
+    top_z = float(bounding_box.location.z + bounding_box.extent.z)
     return polygon.buffer(0.0), bottom_z, top_z
 
 
@@ -544,6 +632,10 @@ def environment_object_footprint_polygon(env_object) -> Tuple[Polygon, float, fl
     return environment_object_bbox_center_polygon(env_object)
 
 
+def environment_object_ground_probe_location(env_object) -> carla.Location:
+    return environment_object_reference_transform(env_object).location
+
+
 def iter_environment_objects_for_labels(
     carla_world: carla.World,
     label_names: Sequence[str],
@@ -565,6 +657,7 @@ def extract_static_obstacle_records(
     config: StaticObstacleValidationConfig,
 ) -> List[StaticObstacleRecord]:
     obstacle_records: List[StaticObstacleRecord] = []
+    carla_map = carla_world.get_map()
     for env_object, canonical_label_name, source_label_name in iter_environment_objects_for_labels(
         carla_world,
         config.label_names,
@@ -574,7 +667,10 @@ def extract_static_obstacle_records(
         if raw_footprint.is_empty:
             continue
 
-        if bottom_z > config.max_bottom_z_m + 1e-6:
+        ground_z = nearest_ground_height_from_waypoint(carla_map, environment_object_ground_probe_location(env_object))
+        if ground_z is None:
+            continue
+        if bottom_z - ground_z > config.max_bottom_z_m + 1e-6:
             continue
 
         height_m = max(0.0, top_z - bottom_z)
@@ -3140,7 +3236,7 @@ def parse_args() -> argparse.Namespace:
         "--obstacle-max-bottom-z",
         default=DEFAULT_STATIC_OBSTACLE_MAX_BOTTOM_Z_M,
         type=float,
-        help="Keep only obstacle footprints whose bottom z is at or below this threshold [m]",
+        help="Keep only obstacle footprints whose bottom clearance above nearby ground is at or below this threshold [m]",
     )
     parser.add_argument(
         "--obstacle-min-area",

@@ -2,9 +2,11 @@ import glob
 import hashlib
 import itertools
 import logging
+from dataclasses import dataclass
 import os
 import tempfile
 import time
+from typing import Optional
 
 import carla
 import numpy as np
@@ -216,6 +218,152 @@ def _nearest_ground_height_from_waypoint(carla_map, location):
     return None, None
 
 
+@dataclass(frozen=True)
+class StaticObstacleGeometrySource:
+    object_id: int
+    label_name: str
+    bounding_box: carla.BoundingBox
+    transform: Optional[carla.Transform]
+
+
+def _bounding_box_reference_transform(bounding_box, transform):
+    if transform is None:
+        return carla.Transform(
+            carla.Location(
+                x=float(bounding_box.location.x),
+                y=float(bounding_box.location.y),
+                z=float(bounding_box.location.z),
+            ),
+            bounding_box.rotation,
+        )
+
+    tolerance = (bounding_box.location - transform.location) * 0.1
+    object_loc = transform.location + tolerance
+    rot = carla.Rotation(-bounding_box.rotation.pitch, -bounding_box.rotation.yaw, -bounding_box.rotation.roll)
+    if bb_contains(bounding_box, object_loc, carla.Transform(rotation=rot)):
+        return carla.Transform(
+            carla.Location(
+                x=float(transform.location.x),
+                y=float(transform.location.y),
+                z=float(bounding_box.location.z),
+            ),
+            transform.rotation,
+        )
+    return carla.Transform(
+        carla.Location(
+            x=float(bounding_box.location.x),
+            y=float(bounding_box.location.y),
+            z=float(bounding_box.location.z),
+        ),
+        bounding_box.rotation,
+    )
+
+
+def _synthetic_level_bbox_object_id(label_name, bbox_index, bounding_box):
+    digest = hashlib.sha1(
+        (
+            f"{label_name}|{bbox_index}|"
+            f"{float(bounding_box.location.x):.6f}|{float(bounding_box.location.y):.6f}|{float(bounding_box.location.z):.6f}|"
+            f"{float(bounding_box.extent.x):.6f}|{float(bounding_box.extent.y):.6f}|{float(bounding_box.extent.z):.6f}|"
+            f"{float(bounding_box.rotation.pitch):.6f}|{float(bounding_box.rotation.yaw):.6f}|{float(bounding_box.rotation.roll):.6f}"
+        ).encode('utf-8')
+    ).hexdigest()
+    return -int(digest[:15], 16)
+
+
+def _static_obstacle_geometry_key(label_name, bounding_box):
+    return (
+        label_name,
+        round(float(bounding_box.location.x), 3),
+        round(float(bounding_box.location.y), 3),
+        round(float(bounding_box.location.z), 3),
+        round(float(bounding_box.extent.x), 3),
+        round(float(bounding_box.extent.y), 3),
+        round(float(bounding_box.extent.z), 3),
+        round(float(bounding_box.rotation.pitch), 3),
+        round(float(bounding_box.rotation.yaw), 3),
+        round(float(bounding_box.rotation.roll), 3),
+    )
+
+
+def _iter_static_obstacle_sources(carla_world, label_names):
+    sources_by_key = {}
+    for label_name in label_names:
+        label = getattr(carla.CityObjectLabel, label_name, None)
+        if label is None:
+            logging.info('Obstacle extraction: skip missing label=%s', label_name)
+            continue
+        logging.info('Obstacle extraction: query env_objects label=%s start', label_name)
+        label_objects = carla_world.get_environment_objects(label)
+        logging.info('Obstacle extraction: query env_objects label=%s done count=%d', label_name, len(label_objects))
+        for obj in label_objects:
+            source = StaticObstacleGeometrySource(
+                object_id=int(obj.id),
+                label_name=label_name,
+                bounding_box=obj.bounding_box,
+                transform=obj.transform,
+            )
+            key = _static_obstacle_geometry_key(label_name, obj.bounding_box)
+            sources_by_key.setdefault(key, source)
+        try:
+            logging.info('Obstacle extraction: query level_bbs label=%s start', label_name)
+            level_bbs = list(carla_world.get_level_bbs(label))
+            logging.info('Obstacle extraction: query level_bbs label=%s done count=%d', label_name, len(level_bbs))
+        except RuntimeError as exc:
+            logging.info('Obstacle extraction: query level_bbs label=%s failed error=%s', label_name, exc)
+            level_bbs = []
+        for bbox_index, bounding_box in enumerate(level_bbs):
+            key = _static_obstacle_geometry_key(label_name, bounding_box)
+            if key in sources_by_key:
+                continue
+            sources_by_key[key] = StaticObstacleGeometrySource(
+                object_id=_synthetic_level_bbox_object_id(label_name, bbox_index, bounding_box),
+                label_name=label_name,
+                bounding_box=bounding_box,
+                transform=None,
+            )
+    logging.info('Obstacle extraction: merged geometry sources unique_count=%d', len(sources_by_key))
+    return list(sources_by_key.values())
+
+
+def _build_obstacle_geometry(source, resolution, ellipse_shape):
+    bb = source.bounding_box
+    transform = _bounding_box_reference_transform(bb, source.transform)
+    object_bottom_z = _object_bottom_z(bb, transform)
+    center = np.array([transform.location.x, transform.location.y])
+
+    if ellipse_shape:
+        if source.label_name == 'Poles' and source.transform is not None:
+            extent = min([bb.extent.x, bb.extent.y])
+            extent_x = extent
+            extent_y = extent
+        else:
+            extent_x = bb.extent.x
+            extent_y = bb.extent.y
+        border_points = generate_ellipse_border(transform, extent_x, extent_y, resolution)
+        return center, border_points, object_bottom_z
+
+    vertices = bb.get_local_vertices()[::2]
+    borders = []
+    border_lengths = []
+    combinations = itertools.combinations(vertices, 2)
+    for start, end in combinations:
+        start_point = np.array([start.x, start.y])
+        end_point = np.array([end.x, end.y])
+        length = np.linalg.norm(end_point - start_point)
+        border_lengths.append(length)
+        samples = max(2, int(length / resolution))
+        border_line = np.column_stack((np.linspace(start_point[0], end_point[0], samples),
+                                       np.linspace(start_point[1], end_point[1], samples)))
+        borders.append(border_line)
+    if len(vertices) != 4:
+        return None, None, object_bottom_z
+    indices = np.argpartition(border_lengths, 4)[:4]
+    borders = [borders[i] for i in indices]
+    border_points = [transform.transform(carla.Location(float(p[0]), float(p[1]), 0.0)) for border_line in borders for p in border_line]
+    return center, border_points, object_bottom_z
+
+
 def extract_obstacles(carla_world, scenario_config):
     """
     Extracts obstacles from Carla world map and generates border points around its bounding box.
@@ -233,9 +381,6 @@ def extract_obstacles(carla_world, scenario_config):
         max_obstacle_clearance,
     )
 
-    # Get objects from Carla world map. CARLA label enums differ slightly across versions,
-    # so only request labels that exist in the active Python API.
-    env_objects = []
     label_names = ['Static', 'Poles', 'Walls']
     if hasattr(carla.CityObjectLabel, 'Vehicles'):
         label_names.append('Vehicles')
@@ -243,49 +388,34 @@ def extract_obstacles(carla_world, scenario_config):
         label_names.extend(['Car', 'Truck', 'Bus', 'Motorcycle', 'Bicycle', 'Train'])
     logging.info('Obstacle extraction: querying labels=%s', label_names)
 
-    for label_name in label_names:
-        label = getattr(carla.CityObjectLabel, label_name, None)
-        if label is None:
-            logging.info('Obstacle extraction: skip missing label=%s', label_name)
-            continue
-        logging.info('Obstacle extraction: query label=%s start', label_name)
-        label_objects = carla_world.get_environment_objects(label)
-        logging.info('Obstacle extraction: query label=%s done count=%d', label_name, len(label_objects))
-        env_objects.extend(label_objects)
-
-    logging.info('Obstacle extraction: dedupe start raw_count=%d', len(env_objects))
-    # Different label families can overlap across CARLA versions, so keep only one object per id.
-    env_objects = list({obj.id: obj for obj in env_objects}.values())
-    logging.info('Obstacle extraction: dedupe done unique_count=%d', len(env_objects))
+    geometry_sources = _iter_static_obstacle_sources(carla_world, label_names)
 
     carla_obstacle_borders = []
     obstacle_positions = []
 
-    for index, o in enumerate(env_objects):
+    for index, source in enumerate(geometry_sources):
         if index > 0 and index % 250 == 0:
-            logging.info('Obstacle extraction: processed %d/%d objects', index, len(env_objects))
-        bb = o.bounding_box
-        vertices = bb.get_local_vertices()[::2]
-
-        object_bottom_z = _object_bottom_z(bb, o.transform)
-        ground_z, ground_lane_type = _nearest_ground_height_from_waypoint(carla_map, o.transform.location)
+            logging.info('Obstacle extraction: processed %d/%d objects', index, len(geometry_sources))
+        probe_transform = _bounding_box_reference_transform(source.bounding_box, source.transform)
+        object_bottom_z = _object_bottom_z(source.bounding_box, probe_transform)
+        ground_z, ground_lane_type = _nearest_ground_height_from_waypoint(carla_map, probe_transform.location)
         if ground_z is None:
             logging.info(
-                'Obstacle extraction: skip object_id=%s type=%s reason=no_ground_waypoint loc=(%.3f, %.3f, %.3f)',
-                o.id,
-                o.type,
-                o.transform.location.x,
-                o.transform.location.y,
-                o.transform.location.z,
+                'Obstacle extraction: skip object_id=%s label=%s reason=no_ground_waypoint loc=(%.3f, %.3f, %.3f)',
+                source.object_id,
+                source.label_name,
+                probe_transform.location.x,
+                probe_transform.location.y,
+                probe_transform.location.z,
             )
             continue
 
         clearance = object_bottom_z - ground_z
         if clearance > max_obstacle_clearance:
             logging.info(
-                'Obstacle extraction: skip object_id=%s type=%s clearance=%.3f bottom_z=%.3f ground_z=%.3f lane_type=%s',
-                o.id,
-                o.type,
+                'Obstacle extraction: skip object_id=%s label=%s clearance=%.3f bottom_z=%.3f ground_z=%.3f lane_type=%s',
+                source.object_id,
+                source.label_name,
                 clearance,
                 object_bottom_z,
                 ground_z,
@@ -293,62 +423,9 @@ def extract_obstacles(carla_world, scenario_config):
             )
             continue
 
-        if ellipse_shape:
-
-            # In Carla the object location isn't always the same as the center of the objects bounding box.
-            # (e.g. the location of a streetlight is where its pole is placed on the ground, but its bounding box center
-            # is somewhere else because the streetlight is bent towards the road)
-            # Here it is decided which of these two points is taken as the center for generating the border ellipse
-            tolerance = (bb.location - o.transform.location) * 0.1
-            object_loc = o.transform.location + tolerance
-            rot = carla.Rotation(-bb.rotation.pitch, -bb.rotation.yaw, -bb.rotation.roll)
-            if bb_contains(bb, object_loc, carla.Transform(rotation=rot)) and o.type is not carla.CityObjectLabel.Walls:
-                transform = o.transform
-            else:
-                loc = carla.Location(bb.location.x, bb.location.y, vertices[0].z)
-                transform = carla.Transform(loc, bb.rotation)
-
-            center = np.array([transform.location.x, transform.location.y])
-
-            # For pole objects the longer extent of the bounding box is ignored
-            if o.type is carla.CityObjectLabel.Poles:
-                extent = min([bb.extent.x, bb.extent.y])
-                extent_x = extent
-                extent_y = extent
-            else:
-                extent_x = bb.extent.x
-                extent_y = bb.extent.y
-
-            border_points = generate_ellipse_border(transform, extent_x, extent_y, resolution)
-
-        else:
-            borders = []
-            border_lengths = []
-
-            # Generate border points based on the bounding box.
-            # Because the vertices from the bounding box are not sorted, every vertex is connected with every other
-            # vertex and only the shortest 4 connections (= borders) are used.
-            combinations = itertools.combinations(vertices, 2)
-            center = np.array([bb.location.x, bb.location.y])
-            for c in combinations:
-                start = c[0]
-                end = c[1]
-                start_point = np.array([start.x, start.y])
-                end_point = np.array([end.x, end.y])
-                length = np.linalg.norm(end_point - start_point)
-                border_lengths.append(length)
-                samples = max(2, int(length / resolution))
-
-                border_line = np.column_stack((np.linspace(start_point[0], end_point[0], samples),
-                                               np.linspace(start_point[1], end_point[1], samples)))
-                borders.append(border_line)
-            if len(vertices) == 4:
-                indices = np.argpartition(border_lengths, 4)[:4]
-                borders = [borders[i] for i in indices]
-            else:
-                continue
-
-            border_points = [carla.Location(p[0], p[1], vertices[0].z) for border_line in borders for p in border_line]
+        center, border_points, _ = _build_obstacle_geometry(source, resolution, ellipse_shape)
+        if border_points is None:
+            continue
 
         carla_obstacle_borders.append(border_points)
         obstacle_positions.append(center)

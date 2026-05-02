@@ -202,7 +202,7 @@ def resolved_config(args: argparse.Namespace):
         return static_obstacle_config_from_catalog(catalog)
 
     if args.obstacle_labels is None:
-        args.obstacle_labels = ["Walls", "Fences", "Static", "Other", "Vegetation"]
+        args.obstacle_labels = ["Walls", "Fences", "Static", "Other", "Vegetation", "Poles", "Vehicles"]
     if args.obstacle_max_bottom_z is None:
         args.obstacle_max_bottom_z = 0.35
     if args.obstacle_min_area is None:

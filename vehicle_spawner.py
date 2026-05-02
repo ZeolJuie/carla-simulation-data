@@ -46,9 +46,21 @@ class VehicleSpawnManager:
 
     def _ensure_traffic_manager(self):
         if self.traffic_manager is None:
+            logging.info(
+                'TM init: begin map=%s seed=%d port=%d',
+                self.scenario_config.get('map', {}).get('map_name'),
+                self.vehicle_seed,
+                8000,
+            )
+            logging.info('TM init: calling client.get_trafficmanager(%d)', 8000)
             self.traffic_manager = self.carla_sim.client.get_trafficmanager(8000)
+            logging.info('TM init: client.get_trafficmanager(%d) ok', 8000)
+            logging.info('TM init: calling traffic_manager.set_synchronous_mode(True)')
             self.traffic_manager.set_synchronous_mode(True)
+            logging.info('TM init: traffic_manager.set_synchronous_mode(True) ok')
+            logging.info('TM init: calling traffic_manager.set_random_device_seed(%d)', self.vehicle_seed)
             self.traffic_manager.set_random_device_seed(self.vehicle_seed)
+            logging.info('TM init: traffic_manager.set_random_device_seed(%d) ok', self.vehicle_seed)
         return self.traffic_manager
 
     def tick(self, sim_time):
@@ -138,7 +150,8 @@ class VehicleSpawnManager:
         speed_reduction_mean = float(config.get('speed_reduction_mean', 10.0))
         speed_reduction_jitter = max(0.0, float(config.get('speed_reduction_jitter', 5.0)))
         auto_pilot = config.get('auto_pilot', True)
-        use_traffic_manager = config.get('use_traffic_manager', True)
+        # use_traffic_manager = config.get('use_traffic_manager', True)
+        use_traffic_manager = False
         ignore_walkers_percentage = float(config.get('ignore_walkers_percentage', 0))
         ignore_lights_percentage = float(config.get('ignore_lights_percentage', 0))
         spawn_time = float(config.get('spawn_time', 0.0))
@@ -233,6 +246,14 @@ class VehicleSpawnManager:
 
         # spawn vehicle in Carla
         tm_autopilot = vehicle_spawner.auto_pilot and vehicle_spawner.use_traffic_manager
+        logging.info(
+            'Vehicle control path: spawn_point=%s bucket=%s auto_pilot=%s use_traffic_manager=%s tm_autopilot=%s',
+            vehicle_spawner.spawn_point_index,
+            getattr(vehicle_spawner, 'population_bucket', None),
+            vehicle_spawner.auto_pilot,
+            vehicle_spawner.use_traffic_manager,
+            tm_autopilot,
+        )
         traffic_manager = self._ensure_traffic_manager() if tm_autopilot else None
         spawn_location = spawn_transform.location
         logging.info(
@@ -249,11 +270,34 @@ class VehicleSpawnManager:
             tm_autopilot,
         )
         if tm_autopilot:
+            logging.info(
+                'TM spawn: building SpawnActor+SetAutopilot batch spawn_point=%s tm_port=%s',
+                vehicle_spawner.spawn_point_index,
+                traffic_manager.get_port(),
+            )
             batch = [self.SpawnActor(vehicle_bp, spawn_transform)
                          .then(self.SetAutopilot(self.FutureActor, True, traffic_manager.get_port()))]
+            logging.info(
+                'TM spawn: SpawnActor+SetAutopilot batch ready spawn_point=%s',
+                vehicle_spawner.spawn_point_index,
+            )
         else:
             batch = [self.SpawnActor(vehicle_bp, spawn_transform)]
+            logging.info(
+                'Vehicle spawn: SpawnActor-only batch ready spawn_point=%s',
+                vehicle_spawner.spawn_point_index,
+            )
+        logging.info(
+            'Vehicle spawn: calling apply_batch_sync spawn_point=%s tm_autopilot=%s',
+            vehicle_spawner.spawn_point_index,
+            tm_autopilot,
+        )
         actor_id = self.carla_sim.spawn_actor_with_batch(batch)
+        logging.info(
+            'Vehicle spawn: apply_batch_sync returned actor_id=%s spawn_point=%s',
+            actor_id,
+            vehicle_spawner.spawn_point_index,
+        )
 
         if self.variate_speed_factor != 0.0:
             vehicle_spawner.speed_reduction_factor += random.uniform(-self.variate_speed_factor,
@@ -269,10 +313,20 @@ class VehicleSpawnManager:
 
             if vehicle_spawner.auto_pilot:
                 if vehicle_spawner.use_traffic_manager:
+                    logging.info(
+                        'TM post-spawn: configuring actor_id=%s speed_diff=%.3f ignore_walkers=%.3f ignore_lights=%.3f',
+                        actor_id,
+                        vehicle_spawner.speed_reduction_factor,
+                        vehicle_spawner.ignore_walkers_percentage,
+                        vehicle_spawner.ignore_lights_percentage,
+                    )
                     traffic_manager.vehicle_percentage_speed_difference(vehicle,
                                                                        vehicle_spawner.speed_reduction_factor)
+                    logging.info('TM post-spawn: vehicle_percentage_speed_difference ok actor_id=%s', actor_id)
                     traffic_manager.ignore_walkers_percentage(vehicle, vehicle_spawner.ignore_walkers_percentage)
+                    logging.info('TM post-spawn: ignore_walkers_percentage ok actor_id=%s', actor_id)
                     traffic_manager.ignore_lights_percentage(vehicle, vehicle_spawner.ignore_lights_percentage)
+                    logging.info('TM post-spawn: ignore_lights_percentage ok actor_id=%s', actor_id)
                 else:
                     self.carla_sim.tick()
                     agent = BehaviorAgent(vehicle)
