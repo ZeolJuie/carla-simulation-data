@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import re
 import shutil
 import sys
 from collections import defaultdict
@@ -7,30 +8,32 @@ from pathlib import Path
 
 import numpy as np
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utils.nuscenes_converter.common import (
-    SUPPORTED_CAMERAS,
-    SUPPORTED_CHANNELS,
-    SUPPORTED_LIDAR,
+from utils.dataset_common import (
     build_ego_world_matrix,
     build_sensor_world_matrix,
-    category_names_from_labels,
-    deterministic_timestamp_us,
-    deterministic_token,
     load_csv_index,
     load_json,
     load_sensor_pose_index,
-    matrix_to_nuscenes_translation_rotation,
     normalize_frame_id,
-    object_rotation_to_nuscenes_quaternion,
     resolve_sensor_pose_frame,
-    sensor_matrix_to_nuscenes_translation_rotation,
     sensor_record_index,
     write_json,
+)
+from utils.nuscenes_converter.common import (
+    SUPPORTED_CHANNELS,
+    SUPPORTED_LIDAR,
+    category_names_from_labels,
+    deterministic_timestamp_us,
+    deterministic_token,
+    matrix_to_nuscenes_translation_rotation,
+    object_rotation_to_nuscenes_quaternion,
+    sensor_matrix_to_nuscenes_translation_rotation,
+    standard_scene_name_from_ids,
+    standard_scene_prefix_from_ids,
 )
 
 
@@ -81,16 +84,118 @@ class SequenceReader:
         self.sequence_dir = Path(sequence_dir).resolve()
         self.sampling_dir = self.sequence_dir / "sampling"
         self.sequence_id = self.sequence_dir.name
+        self.town_name = self.sequence_dir.parent.name
+        self.map_id = self._parse_map_id()
+        self.scene_key = "{}-{}".format(self.map_id, self.sequence_id)
+        self.scene_name = standard_scene_name_from_ids(self.map_id, self.sequence_id)
+        self.scene_prefix = standard_scene_prefix_from_ids(self.map_id, self.sequence_id)
 
         self.log = load_json(self.sampling_dir / "log.json")
-        self.labels = load_json(self.sampling_dir / "labels.json")
+        self.all_labels = load_json(self.sampling_dir / "labels.json")
+        self.labels = self._select_valid_labels()
         self.label_by_frame = {normalize_frame_id(frame["frame_id"]): frame for frame in self.labels}
-        self.ego_by_frame = load_csv_index(self.sampling_dir / "ego.csv")
-        self.sensor_pose_by_frame = load_sensor_pose_index(self.sampling_dir / "sensor_pose.csv")
+        self.source_frame_id_by_frame = {
+            normalize_frame_id(frame["frame_id"]): str(frame["frame_id"])
+            for frame in self.labels
+        }
+        self.ego_by_frame = self._normalize_frame_index(
+            load_csv_index(self.sampling_dir / "ego.csv"),
+            "ego.csv",
+        )
+        self.sensor_pose_by_frame = self._normalize_sensor_pose_index(
+            load_sensor_pose_index(self.sampling_dir / "sensor_pose.csv")
+        )
         self.calibration_payload = load_json(self.sampling_dir / "calibration.json")
         self.calibration_by_sensor = sensor_record_index(self.calibration_payload)
 
         self.frames = [normalize_frame_id(frame["frame_id"]) for frame in self.labels]
+
+    def _parse_map_id(self):
+        match = re.match(r"^Town(\d+)", self.town_name)
+        if match is None:
+            raise RuntimeError(
+                "Sequence {} parent directory must start with Town<number>, got {}".format(
+                    self.sequence_dir,
+                    self.town_name,
+                )
+            )
+        return match.group(1).zfill(2)
+
+    def _select_valid_labels(self):
+        missing = [
+            normalize_frame_id(frame["frame_id"])
+            for frame in self.all_labels
+            if "frame_valid" not in frame
+        ]
+        if missing:
+            preview = ", ".join(missing[:5])
+            raise RuntimeError(
+                "Sequence {} labels.json is missing frame_valid on {} frames, examples {}".format(
+                    self.sequence_dir,
+                    len(missing),
+                    preview,
+                )
+            )
+
+        non_bool = [
+            normalize_frame_id(frame["frame_id"])
+            for frame in self.all_labels
+            if not isinstance(frame["frame_valid"], bool)
+        ]
+        if non_bool:
+            preview = ", ".join(non_bool[:5])
+            raise RuntimeError(
+                "Sequence {} labels.json has non-boolean frame_valid on {} frames, examples {}".format(
+                    self.sequence_dir,
+                    len(non_bool),
+                    preview,
+                )
+            )
+
+        valid_indices = [
+            index for index, frame in enumerate(self.all_labels) if frame["frame_valid"]
+        ]
+        if not valid_indices:
+            raise RuntimeError(
+                "Sequence {} has no frame_valid=true frames in labels.json".format(self.sequence_dir)
+            )
+
+        contiguous_indices = list(range(valid_indices[0], valid_indices[-1] + 1))
+        if valid_indices != contiguous_indices:
+            raise RuntimeError(
+                "Sequence {} frame_valid=true frames are not contiguous".format(self.sequence_dir)
+            )
+
+        return [self.all_labels[index] for index in valid_indices]
+
+    def _normalize_frame_index(self, index, source_name):
+        normalized = {}
+        for frame_id, row in index.items():
+            normalized_frame_id = normalize_frame_id(frame_id)
+            if normalized_frame_id in normalized:
+                raise RuntimeError(
+                    "Sequence {} {} has duplicate normalized frame id {}".format(
+                        self.sequence_dir,
+                        source_name,
+                        normalized_frame_id,
+                    )
+                )
+            normalized[normalized_frame_id] = row
+        return normalized
+
+    def _normalize_sensor_pose_index(self, index):
+        normalized = {}
+        for frame_id, rows_by_sensor in index.items():
+            normalized_frame_id = normalize_frame_id(frame_id)
+            if normalized_frame_id in normalized:
+                raise RuntimeError(
+                    "Sequence {} sensor_pose.csv has duplicate normalized frame id {}".format(
+                        self.sequence_dir,
+                        normalized_frame_id,
+                    )
+                )
+            normalized[normalized_frame_id] = rows_by_sensor
+        return normalized
 
     def pose_frame_id(self, frame_id):
         return resolve_sensor_pose_frame(frame_id, self.sensor_pose_by_frame)
@@ -114,16 +219,20 @@ class SequenceReader:
     def frame_timestamp_us(self, frame_id):
         ego_row = self.ego_by_frame[frame_id]
         return deterministic_timestamp_us(
-            self.sequence_id,
+            self.scene_key,
             frame_id,
             ego_row["timestamp"],
         )
 
     def image_path(self, frame_id, camera_name):
-        return self.sampling_dir / "image" / camera_name / "{}.jpg".format(frame_id)
+        return self.sampling_dir / "image" / camera_name / "{}.jpg".format(
+            self.source_frame_id_by_frame[frame_id]
+        )
 
     def lidar_path(self, frame_id):
-        return self.sampling_dir / "velodyne" / SUPPORTED_LIDAR / "{}.bin".format(frame_id)
+        return self.sampling_dir / "velodyne" / SUPPORTED_LIDAR / "{}.bin".format(
+            self.source_frame_id_by_frame[frame_id]
+        )
 
 
 class NuScenesExporter:
@@ -185,10 +294,10 @@ class NuScenesExporter:
         return existing
 
     def _scene_token(self):
-        return deterministic_token("scene", self.reader.sequence_id)
+        return deterministic_token("scene", self.reader.scene_key)
 
     def _log_token(self):
-        return deterministic_token("log", self.reader.sequence_id)
+        return deterministic_token("log", self.reader.scene_key)
 
     def _validate_append_target(self):
         scene_token = self._scene_token()
@@ -196,7 +305,7 @@ class NuScenesExporter:
         if scene_token in existing_scene_tokens and not self.replace_sequence:
             raise RuntimeError(
                 "Sequence {} already exists in {}. Use --replace-sequence with --append to re-export it.".format(
-                    self.reader.sequence_id,
+                    self.reader.scene_key,
                     self.output_dir,
                 )
             )
@@ -214,7 +323,7 @@ class NuScenesExporter:
         raise RuntimeError(
             "Sequence {} still contains object_id=-1 labels ({} frames, examples {}). "
             "Run utils/postprocess_dataset/run_postprocess.py on the sequence before exporting.".format(
-                self.reader.sequence_id,
+                self.reader.scene_key,
                 len(unresolved),
                 preview,
             )
@@ -281,7 +390,7 @@ class NuScenesExporter:
         self.data["log"] = [
             {
                 "token": token,
-                "logfile": "{}.log".format(self.reader.sequence_id),
+                "logfile": "{}.log".format(self.reader.scene_key),
                 "vehicle": walker_name,
                 "date_captured": self.reader.log.get("date_captured", ""),
                 "location": self.reader.log.get("location", ""),
@@ -313,7 +422,7 @@ class NuScenesExporter:
         prev_token = ""
         for frame_id in self.reader.frames:
             timestamp = self.reader.frame_timestamp_us(frame_id)
-            sample_token = deterministic_token("sample", self.reader.sequence_id, frame_id)
+            sample_token = deterministic_token("sample", self.reader.scene_key, frame_id)
             self.sample_tokens_by_frame[frame_id] = sample_token
             sample_record = {
                 "token": sample_token,
@@ -331,10 +440,7 @@ class NuScenesExporter:
         self.data["scene"] = [
             {
                 "token": scene_token,
-                "name": "scene-{}-{}".format(
-                    self.reader.log.get("location", "unknown").lower(),
-                    self.reader.sequence_id.zfill(4),
-                ),
+                "name": self.reader.scene_name,
                 "description": self.reader.log.get("scenario_name", ""),
                 "log_token": self.log_token,
                 "nbr_samples": len(sample_records),
@@ -349,7 +455,7 @@ class NuScenesExporter:
             ego_row = self.reader.ego_by_frame[frame_id]
             ego_matrix = build_ego_world_matrix(ego_row)
             translation, rotation = matrix_to_nuscenes_translation_rotation(ego_matrix)
-            token = deterministic_token("ego_pose", self.reader.sequence_id, frame_id)
+            token = deterministic_token("ego_pose", self.reader.scene_key, frame_id)
             self.ego_pose_tokens_by_frame[frame_id] = token
             poses.append({
                 "token": token,
@@ -378,7 +484,7 @@ class NuScenesExporter:
                     sensor_to_ego,
                     sensor_modality="lidar" if channel == SUPPORTED_LIDAR else "camera",
                 )
-                calibrated_token = deterministic_token("calibrated_sensor", self.reader.sequence_id, frame_id, channel)
+                calibrated_token = deterministic_token("calibrated_sensor", self.reader.scene_key, frame_id, channel)
                 calibrated_records.append({
                     "token": calibrated_token,
                     "sensor_token": self.sensor_tokens[channel],
@@ -388,7 +494,7 @@ class NuScenesExporter:
                 })
 
                 filename = self._copy_sample_file(frame_id, channel, timestamp)
-                sample_data_token = deterministic_token("sample_data", self.reader.sequence_id, frame_id, channel)
+                sample_data_token = deterministic_token("sample_data", self.reader.scene_key, frame_id, channel)
                 record = {
                     "token": sample_data_token,
                     "sample_token": sample_token,
@@ -424,14 +530,14 @@ class NuScenesExporter:
     def _copy_sample_file(self, frame_id, channel, timestamp):
         if channel == SUPPORTED_LIDAR:
             src = self.reader.lidar_path(frame_id)
-            dst_name = "{}-{}-{}-{}.bin".format(self.reader.sequence_id.zfill(4), frame_id, channel, timestamp)
+            dst_name = "{}-{}-{}-{}.bin".format(self.reader.scene_prefix, frame_id, channel, timestamp)
             dst = self.output_dir / "samples" / channel / dst_name
             points = np.fromfile(str(src), dtype=np.float32).reshape(-1, 4)
             ring = np.zeros((points.shape[0], 1), dtype=np.float32)
             np.hstack((points, ring)).astype(np.float32).tofile(str(dst))
         else:
             src = self.reader.image_path(frame_id, channel)
-            dst_name = "{}-{}-{}-{}.jpg".format(self.reader.sequence_id.zfill(4), frame_id, channel, timestamp)
+            dst_name = "{}-{}-{}-{}.jpg".format(self.reader.scene_prefix, frame_id, channel, timestamp)
             dst = self.output_dir / "samples" / channel / dst_name
             shutil.copy2(src, dst)
         return str(dst.relative_to(self.output_dir))
@@ -451,10 +557,10 @@ class NuScenesExporter:
                 if category_name not in self.category_tokens:
                     continue
 
-                instance_token = deterministic_token("instance", self.reader.sequence_id, obj["object_id"])
+                instance_token = deterministic_token("instance", self.reader.scene_key, obj["object_id"])
                 annotation_token = deterministic_token(
                     "sample_annotation",
-                    self.reader.sequence_id,
+                    self.reader.scene_key,
                     frame_id,
                     obj["object_id"],
                     category_name,
@@ -675,9 +781,11 @@ def main():
     print(
         {
             "sequence_dir": str(reader.sequence_dir),
+            "scene_name": reader.scene_name,
             "output_dir": str(Path(args.output_dir).resolve()),
             "version": args.version,
-            "frames": len(reader.frames),
+            "valid_frames": len(reader.frames),
+            "total_frames": len(reader.all_labels),
             "append": bool(args.append),
             "replace_sequence": bool(args.replace_sequence),
         }

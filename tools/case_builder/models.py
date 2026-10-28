@@ -4,6 +4,9 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+DEFAULT_PLANNER_MODEL = "qwen-plus"
+DEFAULT_PLANNER_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
 
 @dataclass
 class BuildRequest:
@@ -20,8 +23,8 @@ class BuildRequest:
     carla_host: str = "127.0.0.1"
     carla_port: int = 2000
     scenario_prefix: str = "case"
-    model: str = "qwen-plus"
-    base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    model: str = DEFAULT_PLANNER_MODEL
+    base_url: str = DEFAULT_PLANNER_BASE_URL
     api_key: Optional[str] = None
     llm_strict: bool = False
     llm_retries: int = 2

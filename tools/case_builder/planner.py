@@ -120,8 +120,6 @@ class OpenAICompatibleSemanticPlanner:
             }
             for route in skeleton.support_routes
         ]
-        support_behavior_pool = sorted(_support_behavior_pool(skeleton.support_routes))
-
         payload = {
             "model": request.model,
             "messages": [
@@ -310,13 +308,6 @@ def _preferred_ego_behaviors(route_type: str) -> List[str]:
     if route_type in {"crosswalk_cross", "unmarked_junction_cross"}:
         return ["normal_cross", "cautious_cross", "assertive_cross"]
     return ["steady_walk", "slow_walk", "fast_pass"]
-
-
-def _support_behavior_pool(routes) -> set:
-    pool = set()
-    for route in routes:
-        pool.update(route.supported_behaviors)
-    return pool
 
 
 def _weighted_choice(rng: random.Random, items: List[str], preferred: Optional[List[str]] = None) -> str:

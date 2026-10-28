@@ -16,7 +16,7 @@ import numpy as np
 from shapely.geometry import GeometryCollection, LineString, Point, Polygon
 from shapely.ops import unary_union
 
-from path_planner import EdgeType, PedPathPlanner
+from simulation.path_planner import EdgeType, PedPathPlanner
 
 
 ROUTE_TYPE_DEFINITIONS = {

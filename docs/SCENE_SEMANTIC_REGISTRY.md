@@ -20,9 +20,9 @@
 
 相关参考：
 
-- [README.md](/home/zmh/carla-social-force-model/README.md)
-- [SCENE_TOPOLOGY_PIPELINE.md](/home/zmh/carla-social-force-model/SCENE_TOPOLOGY_PIPELINE.md)
-- [docs/scene_route_behavior_reference.md](/home/zmh/carla-social-force-model/docs/scene_route_behavior_reference.md)
+- [README.md](../README.md)
+- [SCENE_TOPOLOGY_PIPELINE.md](../SCENE_TOPOLOGY_PIPELINE.md)
+- [docs/scene_route_behavior_reference.md](./scene_route_behavior_reference.md)
 
 ---
 

@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from case_builder.models import DEFAULT_PLANNER_BASE_URL, DEFAULT_PLANNER_MODEL
+
 
 @dataclass
 class CatalogSpec:
@@ -50,7 +52,7 @@ class DirectorRequest:
     target_count: int
     catalogs: List[CatalogSpec]
     planner: str = "heuristic"
-    model: str = "qwen-plus"
+    model: str = DEFAULT_PLANNER_MODEL
     execute: bool = False
     sampling_enabled: bool = True
     seed: int = 2026
@@ -64,7 +66,7 @@ class DirectorRequest:
     restart_max_cases: int = 8
     restart_wait_s: float = 12.0
     carla_ready_timeout_s: float = 90.0
-    base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    base_url: str = DEFAULT_PLANNER_BASE_URL
     api_key: Optional[str] = None
     llm_strict: bool = False
     llm_retries: int = 2

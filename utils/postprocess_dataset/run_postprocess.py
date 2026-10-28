@@ -4,13 +4,13 @@ import sys
 from pathlib import Path
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from utils.dataset_common import iter_sequence_dirs
 from utils.postprocess_dataset.compute_occlusion import compute_sequence_occlusion
-from utils.postprocess_dataset.repair_static_ids import iter_sequence_dirs, repair_sequence
+from utils.postprocess_dataset.repair_static_ids import repair_sequence
 
 
 def parse_args():
@@ -53,12 +53,14 @@ def main():
             sequence_dir=sequence_dir,
             start_id=10000,
             keep_small_poles=args.keep_small_poles,
+            valid_only=True,
         )
         occ_summary = compute_sequence_occlusion(
             sequence_dir=sequence_dir,
             sensor_name=args.sensor_name,
             zero_points_occlusion=4,
             skip_missing_lidar=args.skip_missing_lidar,
+            valid_only=True,
         )
         print(
             "{sequence}: changed_objects={changed_objects} new_static_instances={new_static_instances} "

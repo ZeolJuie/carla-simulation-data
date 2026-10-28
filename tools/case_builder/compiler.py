@@ -1,15 +1,26 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 
-from case_builder.catalog import CatalogInventory, CatalogInventoryError
+from case_builder.catalog import CatalogInventory
 from case_builder.models import ActorPlan, BuildRequest, BuiltCase, CasePlan, CaseSkeleton
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class CaseCompilationError(ValueError):
     pass
+
+
+def _portable_path(path: Path) -> str:
+    path = Path(path).resolve()
+    try:
+        return path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
 
 
 VEHICLE_DENSITY_CONFIG = {
@@ -49,7 +60,6 @@ def compile_case_config(
     actors: Sequence[ActorPlan],
     sampling_output_root,
     sequence_id,
-    sampling_policy_path,
 ) -> Dict[str, Any]:
     config: Dict[str, Any] = {
         "scenario_name": plan.scenario_name,
@@ -57,9 +67,9 @@ def compile_case_config(
         "map": {
             "map_name": skeleton.map_name,
             "map_path": "Carla/Maps/",
-            "carla_timeout": 30.0,
+            "carla_timeout": 120.0,
             "scene_id": skeleton.scene_id,
-            "scene_catalog_path": skeleton.catalog_path,
+            "scene_catalog_path": _portable_path(skeleton.catalog_path),
             "draw_obstacles": False,
         },
         "weather": {
@@ -82,8 +92,8 @@ def compile_case_config(
     if plan.sampling_enabled:
         config["sampling"] = {
             "enabled": True,
-            "sensor_rig": "config/sensors/default_multimodal.toml",
-            "policy": str(sampling_policy_path),
+            "sensor_rig": "sensor_rig.toml",
+            "policy": "sampling_policy.toml",
             "sequence_id": str(sequence_id),
             "output_root": str(sampling_output_root),
         }
@@ -269,6 +279,7 @@ def write_case_outputs(*, built_case: BuiltCase) -> None:
     )
     if built_case.plan.sampling_enabled:
         _write_sampling_policy(built_case)
+        _copy_sensor_rig(config_dir)
     built_case.manifest_path.write_text(
         json.dumps(
             {
@@ -291,7 +302,7 @@ def write_case_outputs(*, built_case: BuiltCase) -> None:
 
 
 def _write_sampling_policy(built_case: BuiltCase) -> None:
-    source_path = Path(__file__).resolve().parents[2] / "config" / "sampling" / "default.toml"
+    source_path = REPO_ROOT / "config" / "sampling" / "default.toml"
     policy: Dict[str, Any] = {}
     if source_path.exists():
         try:
@@ -300,10 +311,21 @@ def _write_sampling_policy(built_case: BuiltCase) -> None:
             import tomli as tomllib
         policy = tomllib.loads(source_path.read_text(encoding="utf-8"))
 
-    policy["output_root"] = str(built_case.case_dir.parent)
+    policy["output_root"] = _portable_path(built_case.case_dir.parent)
     policy["sequence_id"] = built_case.case_id
     policy["reuse_existing_root"] = True
     built_case.sampling_policy_path.write_text(
         render_toml(policy),
         encoding="utf-8",
     )
+    resolved_path = built_case.case_dir / "config" / "sampling_resolved.json"
+    resolved_path.write_text(
+        json.dumps(policy, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def _copy_sensor_rig(config_dir: Path) -> None:
+    source_path = REPO_ROOT / "config" / "sensors" / "default_multimodal.toml"
+    if source_path.exists():
+        shutil.copyfile(source_path, config_dir / "sensor_rig.toml")

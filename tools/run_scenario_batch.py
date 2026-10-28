@@ -6,7 +6,12 @@ import json
 from pathlib import Path
 
 from scenario_director import ScenarioDirector
-from scenario_director.models import CatalogSpec, DirectorRequest
+from scenario_director.models import (
+    DEFAULT_PLANNER_BASE_URL,
+    DEFAULT_PLANNER_MODEL,
+    CatalogSpec,
+    DirectorRequest,
+)
 
 
 def _log_cli(message: str) -> None:
@@ -24,7 +29,7 @@ def parse_args() -> argparse.Namespace:
         help="Path to a walkable_cells.json catalog. Can be passed multiple times.",
     )
     parser.add_argument("--planner", choices=("heuristic", "llm"), default="heuristic")
-    parser.add_argument("--model", default="qwen-plus")
+    parser.add_argument("--model", default=DEFAULT_PLANNER_MODEL)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--no-sampling", action="store_true")
     parser.add_argument("--seed", type=int, default=2026)
@@ -64,7 +69,7 @@ def parse_args() -> argparse.Namespace:
         default=90.0,
         help="Seconds to wait for CARLA to become responsive after restart.",
     )
-    parser.add_argument("--base-url", default="https://dashscope.aliyuncs.com/compatible-mode/v1")
+    parser.add_argument("--base-url", default=DEFAULT_PLANNER_BASE_URL)
     parser.add_argument("--api-key", default=None)
     parser.add_argument(
         "--llm-strict",

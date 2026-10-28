@@ -4,24 +4,25 @@ import sys
 from pathlib import Path
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utils.postprocess_dataset.common import (
+from utils.dataset_common import (
     build_sensor_world_matrix,
-    count_points_in_oriented_box,
+    iter_sequence_dirs,
     load_csv_index,
     load_json,
     load_sensor_pose_index,
     normalize_frame_id,
-    read_semantic_lidar_points_xyz,
     resolve_sensor_pose_frame,
     sensor_record_index,
-    sequence_dirs_from_root,
     transform_points,
     write_json,
+)
+from utils.postprocess_dataset.common import (
+    count_points_in_oriented_box,
+    read_semantic_lidar_points_xyz,
 )
 
 
@@ -58,13 +59,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def iter_sequence_dirs(input_path):
-    path = Path(input_path)
-    if (path / "sampling" / "labels.json").exists():
-        return [path]
-    return sequence_dirs_from_root(path)
-
-
 def occlusion_level_from_points(points_in_box, zero_points_occlusion):
     if points_in_box == 0:
         return int(zero_points_occlusion)
@@ -77,7 +71,18 @@ def occlusion_level_from_points(points_in_box, zero_points_occlusion):
     return 3
 
 
-def compute_sequence_occlusion(sequence_dir, sensor_name, zero_points_occlusion, skip_missing_lidar):
+def add_normalized_frame_aliases(frame_index):
+    for frame_key, frame_record in list(frame_index.items()):
+        frame_index.setdefault(normalize_frame_id(frame_key), frame_record)
+
+
+def compute_sequence_occlusion(
+    sequence_dir,
+    sensor_name,
+    zero_points_occlusion,
+    skip_missing_lidar,
+    valid_only=False,
+):
     sequence_dir = Path(sequence_dir)
     sampling_dir = sequence_dir / "sampling"
     labels_path = sampling_dir / "labels.json"
@@ -90,6 +95,8 @@ def compute_sequence_occlusion(sequence_dir, sensor_name, zero_points_occlusion,
     calibration_payload = load_json(calibration_path)
     ego_by_frame = load_csv_index(ego_csv_path)
     sensor_pose_by_frame = load_sensor_pose_index(sensor_pose_path) if sensor_pose_path.exists() else {}
+    add_normalized_frame_aliases(ego_by_frame)
+    add_normalized_frame_aliases(sensor_pose_by_frame)
     calibration_by_sensor = sensor_record_index(calibration_payload)
 
     if sensor_name not in calibration_by_sensor:
@@ -101,12 +108,18 @@ def compute_sequence_occlusion(sequence_dir, sensor_name, zero_points_occlusion,
     updated_objects = 0
 
     for frame_record in labels:
-        frame_id = normalize_frame_id(frame_record["frame_id"])
-        ego_row = ego_by_frame.get(frame_id)
-        if ego_row is None:
-            raise KeyError("Frame {} missing from {}".format(frame_id, ego_csv_path))
+        if valid_only and not frame_record.get("frame_valid", True):
+            continue
 
-        lidar_path = lidar_dir / "{}.bin".format(frame_id)
+        frame_name = str(frame_record["frame_id"]).strip()
+        frame_id = normalize_frame_id(frame_name)
+        ego_row = ego_by_frame.get(frame_name) or ego_by_frame.get(frame_id)
+        if ego_row is None:
+            raise KeyError("Frame {} missing from {}".format(frame_name, ego_csv_path))
+
+        lidar_path = lidar_dir / "{}.bin".format(frame_name)
+        if not lidar_path.exists() and frame_name != frame_id:
+            lidar_path = lidar_dir / "{}.bin".format(frame_id)
         if not lidar_path.exists():
             if skip_missing_lidar:
                 skipped_frames += 1

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from case_builder.builder import CaseBuilder
-from case_builder.models import BuildRequest
+from case_builder.models import DEFAULT_PLANNER_BASE_URL, DEFAULT_PLANNER_MODEL, BuildRequest
 
 
 def _log_cli(message: str) -> None:
@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build one executable scene-based case.")
     parser.add_argument(
         "--catalog",
-        default="artifacts/Town10HD_Opt/topology/walkable_cells.json",
+        default="topology/Town10HD_Opt/walkable_cells.json",
         help="Path to walkable_cells.json.",
     )
     parser.add_argument(
@@ -55,10 +55,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--carla-host", default="127.0.0.1", help="CARLA host.")
     parser.add_argument("--carla-port", type=int, default=2000, help="CARLA port.")
     parser.add_argument("--scenario-prefix", default="case", help="Prefix used in scenario_name.")
-    parser.add_argument("--model", default="qwen-plus", help="Planner model when --planner llm is used.")
+    parser.add_argument("--model", default=DEFAULT_PLANNER_MODEL, help="Planner model when --planner llm is used.")
     parser.add_argument(
         "--base-url",
-        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        default=DEFAULT_PLANNER_BASE_URL,
         help="OpenAI-compatible base URL when --planner llm is used.",
     )
     parser.add_argument("--api-key", default=None, help="Optional API key override for llm planner.")

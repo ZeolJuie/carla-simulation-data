@@ -81,9 +81,9 @@ Its responsibilities are:
 
 Current implementation path:
 
-- [tools/scenario_director/director.py](/home/zmh/carla-social-force-model/tools/scenario_director/director.py)
-- [tools/scenario_director/models.py](/home/zmh/carla-social-force-model/tools/scenario_director/models.py)
-- [tools/run_scenario_batch.py](/home/zmh/carla-social-force-model/tools/run_scenario_batch.py)
+- [tools/scenario_director/director.py](../tools/scenario_director/director.py)
+- [tools/scenario_director/models.py](../tools/scenario_director/models.py)
+- [tools/run_scenario_batch.py](../tools/run_scenario_batch.py)
 
 ### CaseBuilder
 
@@ -101,11 +101,11 @@ Its responsibilities are:
 
 Current implementation path:
 
-- [tools/case_builder/builder.py](/home/zmh/carla-social-force-model/tools/case_builder/builder.py)
-- [tools/case_builder/catalog.py](/home/zmh/carla-social-force-model/tools/case_builder/catalog.py)
-- [tools/case_builder/planner.py](/home/zmh/carla-social-force-model/tools/case_builder/planner.py)
-- [tools/case_builder/compiler.py](/home/zmh/carla-social-force-model/tools/case_builder/compiler.py)
-- [tools/build_case.py](/home/zmh/carla-social-force-model/tools/build_case.py)
+- [tools/case_builder/builder.py](../tools/case_builder/builder.py)
+- [tools/case_builder/catalog.py](../tools/case_builder/catalog.py)
+- [tools/case_builder/planner.py](../tools/case_builder/planner.py)
+- [tools/case_builder/compiler.py](../tools/case_builder/compiler.py)
+- [tools/build_case.py](../tools/build_case.py)
 
 ## End-to-End Pipeline
 
@@ -124,7 +124,7 @@ This step produces `walkable_cells.json`, which becomes the base inventory for t
 
 Relevant implementation:
 
-- [utils/generate_walkable_cells.py](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py)
+- [utils/generate_walkable_cells.py](../utils/generate_walkable_cells.py)
 
 ### Stage 2. Scenario Selection
 
@@ -267,7 +267,7 @@ The system exposes two primary entry points.
 
 ### 1. Build One Case
 
-Use [tools/build_case.py](/home/zmh/carla-social-force-model/tools/build_case.py) to generate one case.
+Use [tools/build_case.py](../tools/build_case.py) to generate one case.
 
 Example:
 
@@ -342,7 +342,7 @@ This command:
 
 ### 2. Run Batch Generation
 
-Use [tools/run_scenario_batch.py](/home/zmh/carla-social-force-model/tools/run_scenario_batch.py) to run multiple cases under `ScenarioDirector`.
+Use [tools/run_scenario_batch.py](../tools/run_scenario_batch.py) to run multiple cases under `ScenarioDirector`.
 
 Example:
 
@@ -350,8 +350,7 @@ Example:
 python3 tools/run_scenario_batch.py \
   --output-root ./data \
   --target-count 20 \
-  --catalog topology/Town05_Opt/walkable_cells.json \
-  --catalog topology/Town07/walkable_cells.json \
+  --catalog topology/Town10HD_Opt/walkable_cells.json \
   --planner llm \
   --model qwen-plus \
   --execute \

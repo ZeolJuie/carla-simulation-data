@@ -1,5 +1,6 @@
 sequence_id = "auto"
 output_root = "artifacts/sequences"
+reuse_existing_root = false
 frame_stride = 10
 valid_distance = 40.0
 sensor_sync_timeout = 1.0

@@ -42,7 +42,7 @@
 
 ### 3.2 运行时 tile streaming
 
-- `carla_simulation.py`
+- `simulation/carla_simulation.py`
 
 在检测到 tile catalog case 后：
 
@@ -55,7 +55,7 @@
 
 ### 3.3 运行时 PedPathPlanner 按需化
 
-- `pedestrian_spawner.py`
+- `simulation/pedestrian_spawner.py`
 
 对 scene-route case：
 
@@ -85,7 +85,7 @@
 
 ### 3.5 静态障碍物高度过滤
 
-- `obstacles.py`
+- `simulation/obstacles.py`
 
 静态障碍物过滤从“绝对世界 `z` 阈值”改成“相对最近地面的 clearance 阈值”：
 

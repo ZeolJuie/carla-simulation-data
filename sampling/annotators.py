@@ -3,27 +3,12 @@ import math
 import carla
 import numpy as np
 
-
-SUPPORTED_CITY_OBJECT_LABEL_NAMES = [
-    'TrafficLight',
-    'TrafficSigns',
-    'Poles',
-    'Static',
-    'Fences',
-    'Other',
-    'Dynamic',
-    'GuardRail',
-    'Car',
-    'Truck',
-    'Bus',
-    'Motorcycle',
-    'Bicycle',
-]
+from sampling.defaults import CITY_OBJECT_LABEL_NAMES
 
 
 def _build_city_object_label_mapping():
     mapping = {}
-    for label_name in SUPPORTED_CITY_OBJECT_LABEL_NAMES:
+    for label_name in CITY_OBJECT_LABEL_NAMES:
         label = getattr(carla.CityObjectLabel, label_name, None)
         if label is not None:
             mapping[label_name] = label

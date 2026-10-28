@@ -3,28 +3,10 @@ import json
 import logging
 import math
 from datetime import datetime
-from pathlib import Path
 
 from sampling.annotators import actor_annotations, city_object_annotations
+from sampling.defaults import CITY_OBJECT_LABEL_NAMES, DEFAULT_ACTOR_FILTERS
 from sampling.sensors import create_sampling_sensor
-
-
-DEFAULT_ACTOR_FILTERS = ['*pedestrian*', '*vehicle*']
-DEFAULT_CITY_OBJECT_LABELS = [
-    'TrafficLight',
-    'TrafficSigns',
-    'Poles',
-    'Static',
-    'Fences',
-    'Other',
-    'Dynamic',
-    'GuardRail',
-    'Car',
-    'Truck',
-    'Bus',
-    'Motorcycle',
-    'Bicycle',
-]
 
 
 class SamplingCollector:
@@ -37,7 +19,7 @@ class SamplingCollector:
         self.sensor_rig = sequence_manager.sensor_rig
 
         self.actor_filters = self.policy.get('annotation', {}).get('actor_filters', DEFAULT_ACTOR_FILTERS)
-        self.city_object_labels = self.policy.get('annotation', {}).get('city_object_labels', DEFAULT_CITY_OBJECT_LABELS)
+        self.city_object_labels = self.policy.get('annotation', {}).get('city_object_labels', CITY_OBJECT_LABEL_NAMES)
         self.valid_distance = float(self.policy.get('valid_distance', 40.0))
         self.frame_stride = max(int(self.policy.get('frame_stride', 10)), 1)
         self.sensor_sync_timeout = float(self.policy.get('sensor_sync_timeout', 1.0))
@@ -164,7 +146,7 @@ class SamplingCollector:
         return s * s * (3.0 - 2.0 * s)
 
     def _update_sensor_motion(self, snapshot):
-        if not self.active or not self.gait_enabled or self.ego_actor is None:
+        if not self.active or self.ego_actor is None:
             return
 
         current_time = snapshot.timestamp.elapsed_seconds
@@ -177,7 +159,7 @@ class SamplingCollector:
 
         velocity = self.ego_actor.get_velocity()
         speed = math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z)
-        activity = self._gait_activity(speed)
+        activity = self._gait_activity(speed) if self.gait_enabled else 0.0
 
         freq_min = float(self.gait_motion.get('frequency_min_hz', 1.2))
         freq_max = float(self.gait_motion.get('frequency_max_hz', 2.2))
@@ -255,8 +237,8 @@ class SamplingCollector:
 
         self._record_ego_pose(snapshot)
         self._record_labels(frame_id)
-        self._record_sensor_pose(frame_id)
         self._update_sensor_motion(snapshot)
+        self._record_sensor_pose(frame_id)
 
     def _record_ego_pose(self, snapshot):
         transform = self.ego_actor.get_transform()

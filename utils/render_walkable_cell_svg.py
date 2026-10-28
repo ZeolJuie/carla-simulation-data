@@ -18,7 +18,7 @@ from generate_walkable_cells import (
     relevant_obstacles_for_bounds,
     static_obstacle_config_from_catalog,
 )
-from path_planner import EdgeType, PedPathPlanner
+from simulation.path_planner import EdgeType, PedPathPlanner
 
 
 EDGE_STYLE = {
@@ -460,13 +460,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1", help="CARLA host")
     parser.add_argument("--port", default=2000, type=int, help="CARLA port")
     parser.add_argument("--timeout", default=180.0, type=float, help="CARLA RPC timeout in seconds")
-    parser.add_argument("--map-name", default="Town03_Opt", help="CARLA map name")
+    parser.add_argument("--map-name", default="Town10HD_Opt", help="CARLA map name")
     parser.add_argument("--cell-id", required=True, help="Cell id from walkable_cells.json, e.g. crossing_002")
     parser.add_argument(
         "--catalog-path",
         type=Path,
         default=None,
-        help="Path to walkable_cells.json (defaults to artifacts/<map_name>/topology/walkable_cells.json)",
+        help="Path to walkable_cells.json (defaults to topology/<map_name>/walkable_cells.json)",
     )
     parser.add_argument(
         "--waypoint-distance",
@@ -485,7 +485,7 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_args()
-    catalog_path = args.catalog_path or Path("artifacts") / args.map_name / "topology" / "walkable_cells.json"
+    catalog_path = args.catalog_path or Path("topology") / args.map_name / "walkable_cells.json"
     output_path = args.output or Path("artifacts") / args.map_name / "topology" / f"{args.cell_id}_routes.svg"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

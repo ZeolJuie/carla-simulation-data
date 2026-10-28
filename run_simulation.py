@@ -6,13 +6,15 @@ import carla
 import numpy as np
 import tomli
 
-from carla_simulation import CarlaSimulation
-from obstacles import extract_sidewalk, extract_obstacles, get_dynamic_obstacles, extract_borders_from_config
-from output_generator import OutputGenerator
-from pedestrian_simulation import PedestrianSimulation
-from pedestrian_spawner import PedSpawnManager
-from sampling import load_sampling_setup, SamplingCollector, SamplingSequenceManager
-from vehicle_spawner import VehicleSpawnManager
+from simulation.carla_simulation import CarlaSimulation
+from simulation.obstacles import extract_sidewalk, extract_obstacles, get_dynamic_obstacles, extract_borders_from_config
+from simulation.output_generator import OutputGenerator
+from simulation.pedestrian_simulation import PedestrianSimulation
+from simulation.pedestrian_spawner import PedSpawnManager
+from sampling.collector import SamplingCollector
+from sampling.config_loader import load_sampling_setup
+from sampling.sequence_manager import SamplingSequenceManager
+from simulation.vehicle_spawner import VehicleSpawnManager
 
 
 class SimulationRunner:
@@ -35,7 +37,7 @@ class SimulationRunner:
         self.output_csv = args.csv
         self.output_path = args.output
         self.duration = args.duration
-        self.step_length = scenario_config.get('step_length', {0.05})
+        self.step_length = scenario_config.get('step_length', 0.05)
 
         walker_config = scenario_config.get('walker', {})
         self.draw_bounding_boxes = walker_config.get('draw_bounding_boxes', False)
@@ -214,7 +216,6 @@ class SimulationRunner:
             self.sampling_collector.update_sensor_world_poses()
         self.carla_sim.tick()
         snapshot = self.carla_sim.world.get_snapshot()
-        all_actors = self.carla_sim.world.get_actors()
         self._update_ego_spectator_follow()
         for actor_id in self.walker_dict.values():
             walker = self.carla_sim.get_actor(actor_id)
@@ -303,12 +304,16 @@ class SimulationRunner:
 
         if should_generate_simulation_records:
             scenario_name = self.scenario_config.get('scenario_name')
+            sequence_simulation_dir = (
+                self.sequence_manager.paths['simulation'] if self.sequence_manager is not None else None
+            )
 
             output_gen = OutputGenerator(
                 self.ped_sim,
                 self.output_path,
                 scenario_name,
                 weather_metadata=self.carla_sim.generated_weather,
+                output_dir=sequence_simulation_dir,
             )
             output_gen.generate_ped_csv()
             output_gen.generate_veh_csv()
@@ -316,10 +321,7 @@ class SimulationRunner:
             output_gen.generate_obstacles_csv()
             output_gen.generate_weather_json()
             if self.sequence_manager is not None:
-                self.sequence_manager.finalize_from_sim_output(
-                    output_gen.output_dir,
-                    self.carla_sim,
-                )
+                self.sequence_manager.finalize_from_sim_output(None, self.carla_sim)
 
 
 def simulation_loop(args):
@@ -376,10 +378,6 @@ def simulation_loop(args):
         len(carla_obstacle_borders),
     )
 
-    # # only for comparison purposes (obstacle evasion with simple border force vs. obstacle evasion force)
-    # borders.extend(obstacle_borders)
-    # section_info.extend([list(z) for z in zip(obstacle_positions, [20] * len(obstacle_positions))])
-
     carla_borders.extend(carla_obstacle_borders)
     obstacles = list(zip(obstacle_positions, obstacle_borders))
 
@@ -425,7 +423,6 @@ def simulation_loop(args):
 
             end = time.time()
             elapsed = end - start
-            # print(f'Elapsed time: {elapsed}')
             if elapsed < step_length:
                 time.sleep(step_length - elapsed)
 
@@ -452,7 +449,7 @@ def load_config(config_path):
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser(description=__doc__)
     argparser.add_argument('--scenario-config',
-                           default='config/scenarios/sidewalk_scenario_config.toml',
+                           required=True,
                            type=str,
                            help='scenario configuration file')
     argparser.add_argument('--sfm-config',

@@ -3,6 +3,7 @@ import os
 import csv
 import yaml
 import json
+import re
 import torch
 import chamfer
 import glob
@@ -29,11 +30,14 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utils.postprocess_dataset.common import (  # noqa: E402
+from utils.dataset_common import (  # noqa: E402
     build_sensor_world_matrix,
     normalize_frame_id,
     resolve_sensor_pose_frame,
     sensor_record_index,
+)
+from utils.nuscenes_converter.common import (  # noqa: E402
+    standard_scene_name_from_ids,
 )
 
 
@@ -102,6 +106,24 @@ camera_configs = [
         'image_size': (1600, 900)
     }
 ]
+
+
+def infer_standard_scene_name_from_path(sequence_path):
+    sequence_dir = Path(sequence_path).resolve()
+    if sequence_dir.name == "sampling":
+        sequence_dir = sequence_dir.parent
+    town_name = sequence_dir.parent.name
+    sequence_id = sequence_dir.name
+    match = re.match(r"^Town(\d+)", town_name)
+    if match is None:
+        raise RuntimeError(
+            "Sequence {} parent directory must start with Town<number>, got {}".format(
+                sequence_dir,
+                town_name,
+            )
+        )
+    map_id = match.group(1).zfill(2)
+    return standard_scene_name_from_ids(map_id, sequence_id)
 
 
 def world_to_camera(point, cam_pose):
@@ -688,8 +710,7 @@ if __name__ == '__main__':
     from argparse import ArgumentParser
     parse = ArgumentParser()
 
-    # parse.add_argument('--data_path', type=str, default="/mnt/ws-data/data/project/SurroundOcc/tools/generate_occupancy_with_own_data/gt_generation_template")
-    parse.add_argument('--data_path', type=str, default="/home/zhoumohan/codes/TAPSN/data/Town02_Opt/001")
+    parse.add_argument('--data_path', type=str, required=True, help='TAPSN sequence directory, e.g. TAPSN/Town10HD_Opt/001')
     parse.add_argument('--out_path', type=str, default=None)
     parse.add_argument('--config_path', type=str, default=str(REPO_ROOT / 'config' / 'occ' / 'default.toml'))
     parse.add_argument('--sensor_name', type=str, default='LIDAR_TOP_SEMANTIC')
@@ -713,6 +734,9 @@ if __name__ == '__main__':
     path = args.data_path
     out_path = args.out_path or os.path.join(path, "occ")
     os.makedirs(out_path, exist_ok=True)
+    scene_name = infer_standard_scene_name_from_path(path)
+    scene_out_path = os.path.join(out_path, scene_name)
+    os.makedirs(scene_out_path, exist_ok=True)
 
     sampling_path = os.path.join(path, 'sampling')
     if not os.path.exists(sampling_path):
@@ -746,7 +770,6 @@ if __name__ == '__main__':
     len_side = args.len_side if args.len_side is not None else config['len_side']
      
     i = 0
-    all_sample_number = len(pc_seman_pathes)
 
     # 加载数据
     point_dtype = np.dtype([
@@ -756,8 +779,18 @@ if __name__ == '__main__':
     
     # load boxes
     with open(label_path, "r") as f:
-        labels = json.load(f)
-    labels = {frame["frame_id"]: frame['objects'] for frame in labels}
+        label_frames = json.load(f)
+    valid_frame_ids = {
+        frame["frame_id"]
+        for frame in label_frames
+        if frame.get("frame_valid") is True
+    }
+    pc_seman_pathes = [
+        path for path in pc_seman_pathes
+        if os.path.basename(path).split('.')[0] in valid_frame_ids
+    ]
+    all_sample_number = len(pc_seman_pathes)
+    labels = {frame["frame_id"]: frame['objects'] for frame in label_frames}
 
     with open(calibration_path, 'r') as f:
         calibration_payload = json.load(f)
@@ -1144,7 +1177,7 @@ if __name__ == '__main__':
                 )
 
                 mask_lidar = np.ones(occ_size).astype(np.int8)
-                occ_out_dir = os.path.join(out_path, f'sample_{name}')
+                occ_out_dir = os.path.join(scene_out_path, f'sample_{name}')
                 dict_npz = {"semantics": semantics,  "mask_camera": mask_camera, "mask_lidar": mask_lidar}
                 os.makedirs(occ_out_dir, exist_ok=True)
                 np.savez(os.path.join(occ_out_dir, 'labels.npz'), **dict_npz)

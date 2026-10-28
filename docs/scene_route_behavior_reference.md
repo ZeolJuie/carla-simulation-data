@@ -177,7 +177,7 @@ crossing_speed = crossing_speed_factor * target_speed
 1. `walker.ped_spawner.crossing_safety_margin`
 2. 否则用 `behavior profile` 默认值
 
-运行时逻辑在 `check_traffic.py`：
+运行时逻辑在 `simulation/check_traffic.py`：
 
 - 行人根据当前位置和 `next_waypoint` 形成一条计划 crossing 轨迹
 - 车辆用当前速度线性外推
@@ -231,7 +231,7 @@ crossing_speed = crossing_speed_factor * target_speed
 ```toml
 [map]
 scene_id = 'crossing_002'
-scene_catalog_path = 'artifacts/Town03_Opt/topology/walkable_cells.json'
+scene_catalog_path = 'topology/Town10HD_Opt/walkable_cells.json'
 
 [walker]
 default_speed = 1.2

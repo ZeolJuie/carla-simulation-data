@@ -4,7 +4,11 @@ import shutil
 import time
 from pathlib import Path
 
+from sampling.defaults import SENSOR_OUTPUT_SUBDIRS
 from sampling.ego_selector import resolve_declared_ego, matches_declared_ego
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _json_dump(path, payload):
@@ -41,7 +45,7 @@ class SamplingSequenceManager:
         return f'{time_stamp}-{scenario_name}'
 
     def _resolve_sequence_root(self):
-        base_root = Path(self.policy.get('output_root', 'artifacts/sequences')).resolve()
+        base_root = (REPO_ROOT / Path(self.policy.get('output_root', 'artifacts/sequences'))).resolve()
         root = base_root / self.sequence_id
         if self.policy.get('reuse_existing_root', False):
             return root
@@ -69,16 +73,7 @@ class SamplingSequenceManager:
             path.mkdir(parents=True, exist_ok=True)
 
         sampling_root = self.paths['sampling']
-        for subdir in (
-            'image',
-            'depth',
-            'semantic',
-            'velodyne',
-            'velodyne_semantic',
-            'radar',
-            'imu',
-            'gnss',
-        ):
+        for subdir in sorted(set(SENSOR_OUTPUT_SUBDIRS.values())):
             (sampling_root / subdir).mkdir(parents=True, exist_ok=True)
 
         for sensor in self.sensor_rig.get('sensor', []):
@@ -87,6 +82,9 @@ class SamplingSequenceManager:
                 sensor_dir.mkdir(parents=True, exist_ok=True)
 
     def _write_config_snapshots(self):
+        if not self.policy.get('export', {}).get('config_snapshots', True):
+            return
+
         scenario_path = Path(self.sampling_setup['scenario_config_path'])
         self._copy_snapshot_if_needed(scenario_path, self.paths['config'] / 'scenario.toml')
 
@@ -117,24 +115,13 @@ class SamplingSequenceManager:
         sensor_type = sensor_spec.get('type')
         sensor_name = sensor_spec.get('name')
         sampling_root = self.paths['sampling']
+        subdir = SENSOR_OUTPUT_SUBDIRS.get(sensor_type)
+        if subdir is None:
+            return None
 
-        if sensor_type == 'camera.rgb':
-            return sampling_root / 'image' / str(sensor_name)
-        if sensor_type == 'camera.depth':
-            return sampling_root / 'depth' / str(sensor_name)
-        if sensor_type == 'camera.semantic_segmentation':
-            return sampling_root / 'semantic' / str(sensor_name)
-        if sensor_type == 'lidar.ray_cast':
-            return sampling_root / 'velodyne' / str(sensor_name)
-        if sensor_type == 'lidar.ray_cast_semantic':
-            return sampling_root / 'velodyne_semantic' / str(sensor_name)
-        if sensor_type == 'radar':
-            return sampling_root / 'radar' / str(sensor_name)
-        if sensor_type == 'imu':
-            return sampling_root / 'imu'
-        if sensor_type == 'gnss':
-            return sampling_root / 'gnss'
-        return None
+        if sensor_type in {'imu', 'gnss'}:
+            return sampling_root / subdir
+        return sampling_root / subdir / str(sensor_name)
 
     def on_ped_spawned(self, ped_name, actor_id, spawn_metadata):
         actor_id = int(actor_id)
@@ -177,17 +164,19 @@ class SamplingSequenceManager:
         return self.pedestrians_by_actor_id.get(int(actor_id))
 
     def finalize_from_sim_output(self, simulation_output_dir, carla_sim):
-        sim_output_dir = Path(simulation_output_dir)
         simulation_dir = self.paths['simulation']
         simulation_dir.mkdir(parents=True, exist_ok=True)
 
         copied_files = []
-        for source in sim_output_dir.iterdir():
-            if not source.is_file():
-                continue
-            destination = simulation_dir / source.name
-            shutil.copy2(source, destination)
-            copied_files.append(destination.name)
+        if simulation_output_dir is not None:
+            for source in Path(simulation_output_dir).iterdir():
+                if not source.is_file():
+                    continue
+                destination = simulation_dir / source.name
+                shutil.copy2(source, destination)
+                copied_files.append(destination.name)
+        else:
+            copied_files = sorted(path.name for path in simulation_dir.iterdir() if path.is_file())
 
         bev_output_path = None
         if self.policy.get('export', {}).get('pedestrian_bev', True):
@@ -204,7 +193,7 @@ class SamplingSequenceManager:
             'scenario_name': self.scenario_config.get('scenario_name'),
             'map_name': self.scenario_config.get('map', {}).get('map_name'),
             'scene_id': self.scenario_config.get('map', {}).get('scene_id'),
-            'simulation_output_dir': str(sim_output_dir.resolve()),
+            'simulation_output_dir': str(simulation_dir.resolve()),
             'copied_simulation_files': copied_files,
             'pedestrian_bev': str(bev_output_path) if bev_output_path is not None else None,
             'weather': carla_sim.generated_weather,
@@ -231,7 +220,7 @@ class SamplingSequenceManager:
 
     def render_pedestrian_bev(self):
         try:
-            from utils import render_pedestrian_bev as bev
+            from sampling import bev
         except Exception as exc:  # pragma: no cover
             logging.warning('Failed to import pedestrian BEV renderer: %s', exc)
             return None
@@ -248,7 +237,7 @@ class SamplingSequenceManager:
         scene_id = map_config.get('scene_id')
         catalog_path = map_config.get('scene_catalog_path')
         if catalog_path is not None:
-            catalog_path = Path(catalog_path)
+            catalog_path = REPO_ROOT / Path(catalog_path)
 
         trajectories = bev.load_pedestrian_trajectories(pedestrian_csv)
         vehicle_trajectories = bev.load_vehicle_trajectories(vehicle_csv)
@@ -265,7 +254,7 @@ class SamplingSequenceManager:
             bev.load_obstacle_polygons(obstacles_csv),
             focus_extent,
         )
-        ego_ped_id = bev._parse_ego_ped_id(ego_selection_json)
+        ego_ped_id = bev.parse_ego_ped_id(ego_selection_json)
 
         title = self.scenario_config.get('scenario_name') or self.root.name
         svg = bev.render_svg(

@@ -14,7 +14,7 @@
 ## 1. 改造目标
 
 原始项目的能力重点是：
-- 基于 `path_planner.py` 从 CARLA 地图构建行人可行走图
+- 基于 `simulation/path_planner.py` 从 CARLA 地图构建行人可行走图
 - 基于 `scenario_config.toml` 手工配置行人生成点、目标点、waypoints
 - 运行 Social Force Model 行人仿真
 
@@ -40,7 +40,7 @@
 ### 2.1 候选场景目录导出
 
 已实现脚本：
-- [utils/generate_walkable_cells.py](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py)
+- [utils/generate_walkable_cells.py](../utils/generate_walkable_cells.py)
 
 脚本能够：
 - 连接 CARLA，读取 `PedPathPlanner` 的行人拓扑图
@@ -95,9 +95,9 @@ route 与 behavior 是一对多关系，不是绑定关系。
 ### 2.3 Scene-based 仿真配置入口
 
 已实现文件：
-- [scene_catalog.py](/home/zmh/carla-social-force-model/scene_catalog.py)
-- [pedestrian_spawner.py](/home/zmh/carla-social-force-model/pedestrian_spawner.py)
-- [carla_simulation.py](/home/zmh/carla-social-force-model/carla_simulation.py)
+- [scene_catalog.py](../simulation/scene_catalog.py)
+- [pedestrian_spawner.py](../simulation/pedestrian_spawner.py)
+- [carla_simulation.py](../simulation/carla_simulation.py)
 
 新增能力：
 - `[map]` 下支持 `scene_id`
@@ -130,9 +130,10 @@ route 与 behavior 是一对多关系，不是绑定关系。
 carla-social-force-model/
 ├── SCENARIO.md
 ├── SCENE_TOPOLOGY_PIPELINE.md
-├── scene_catalog.py
-├── pedestrian_spawner.py
-├── carla_simulation.py
+├── simulation/
+│   ├── scene_catalog.py
+│   ├── pedestrian_spawner.py
+│   └── carla_simulation.py
 ├── config/
 │   └── scenarios/
 │       └── scene_id_scenario_config.toml
@@ -140,7 +141,7 @@ carla-social-force-model/
 │   ├── generate_walkable_cells.py
 │   └── render_walkable_cell_svg.py
 └── artifacts/
-    └── Town03_Opt/
+    └── Town10HD_Opt/
         └── topology/
             ├── walkable_cells.json
             ├── walkable_cells.svg
@@ -150,29 +151,29 @@ carla-social-force-model/
 
 各文件职责：
 
-- [SCENARIO.md](/home/zmh/carla-social-force-model/SCENARIO.md)
+- [SCENARIO.md](../SCENARIO.md)
   - 语义场景的数学化定义
-- [utils/generate_walkable_cells.py](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py)
+- [utils/generate_walkable_cells.py](../utils/generate_walkable_cells.py)
   - 从地图拓扑导出候选场景目录
-- [utils/render_walkable_cell_svg.py](/home/zmh/carla-social-force-model/utils/render_walkable_cell_svg.py)
+- [utils/render_walkable_cell_svg.py](../utils/render_walkable_cell_svg.py)
   - 可视化单个 cell 的 2D 可行走范围与 routes
-- [scene_catalog.py](/home/zmh/carla-social-force-model/scene_catalog.py)
+- [scene_catalog.py](../simulation/scene_catalog.py)
   - 运行时对 scene catalog 的读取、筛选与验证
-- [pedestrian_spawner.py](/home/zmh/carla-social-force-model/pedestrian_spawner.py)
+- [pedestrian_spawner.py](../simulation/pedestrian_spawner.py)
   - 将 `scene_id + behavior` 编译为实际行人生成参数
-- [config/scenarios/scene_id_scenario_config.toml](/home/zmh/carla-social-force-model/config/scenarios/scene_id_scenario_config.toml)
-  - 新能力的示例配置
-- [artifacts/Town03_Opt/topology/walkable_cells.json](/home/zmh/carla-social-force-model/artifacts/Town03_Opt/topology/walkable_cells.json)
-  - Town03_Opt 的当前候选场景目录
+- [tools/case_builder/compiler.py](../tools/case_builder/compiler.py)
+  - 将场景骨架编译为最终 `scenario.toml` 的逻辑
+- [topology/Town10HD_Opt/walkable_cells.json](../topology/Town10HD_Opt/walkable_cells.json)
+  - Town10HD_Opt 的当前候选场景目录
 
 ## 4. 核心数据结构
 
 ### 4.1 path planner 底层图
 
-底层仍然基于原始 [path_planner.py](/home/zmh/carla-social-force-model/path_planner.py)。
+底层仍然基于原始 [path_planner.py](../simulation/path_planner.py)。
 
 在本次导出脚本中，planner edge 被重新包装为 `EdgeRecord`：
-- 定义位置：[generate_walkable_cells.py](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L105)
+- 定义位置：[generate_walkable_cells.py](../utils/generate_walkable_cells.py#L105)
 
 核心字段：
 - `edge_id`
@@ -196,7 +197,7 @@ carla-social-force-model/
 
 ```json
 {
-  "map_name": "Town03_Opt",
+  "map_name": "Town10HD_Opt",
   "catalog_type": "candidate_scene_catalog",
   "cells_are_candidate_scenes": true,
   "rules": {...},
@@ -316,9 +317,9 @@ carla-social-force-model/
 ## 5. 当前 route type 与 behavior 的对应关系
 
 定义位置：
-- [generate_walkable_cells.py](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L18)
-- [generate_walkable_cells.py](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L45)
-- [generate_walkable_cells.py](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L90)
+- [generate_walkable_cells.py](../utils/generate_walkable_cells.py#L18)
+- [generate_walkable_cells.py](../utils/generate_walkable_cells.py#L45)
+- [generate_walkable_cells.py](../utils/generate_walkable_cells.py#L90)
 
 对应关系如下：
 
@@ -354,8 +355,8 @@ carla-social-force-model/
 ### 6.1 地图与 planner 图读取
 
 核心入口：
-- [load_world()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L222)
-- [build_edge_records()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L238)
+- [load_world()](../utils/generate_walkable_cells.py#L222)
+- [build_edge_records()](../utils/generate_walkable_cells.py#L238)
 
 作用：
 - 连接 CARLA world
@@ -366,7 +367,7 @@ carla-social-force-model/
 ### 6.2 Cell 划分
 
 核心入口：
-- [partition_walkable_cells()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L1399)
+- [partition_walkable_cells()](../utils/generate_walkable_cells.py#L1399)
 
 内部关键逻辑：
 - crossing 优先保留
@@ -376,8 +377,8 @@ carla-social-force-model/
 
 关键方法：
 - `build_sidewalk_assignments(...)`
-- [merge_short_sidewalk_chunks()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L685)
-- [build_cell_record()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L731)
+- [merge_short_sidewalk_chunks()](../utils/generate_walkable_cells.py#L685)
+- [build_cell_record()](../utils/generate_walkable_cells.py#L731)
 
 规则：
 - crossing 单元优先，防止与 sidewalk 冲突
@@ -386,7 +387,7 @@ carla-social-force-model/
 ### 6.3 Route 分类
 
 核心方法：
-- [route_type_for_path()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L1019)
+- [route_type_for_path()](../utils/generate_walkable_cells.py#L1019)
 
 分类逻辑：
 - 若路径经过 `CROSSWALK` -> `crosswalk_cross`
@@ -408,10 +409,10 @@ carla-social-force-model/
 ### 6.4 Route 生成
 
 核心方法：
-- [build_route_support_for_cell()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L1102)
-- [build_leaf_portals()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L1126)
+- [build_route_support_for_cell()](../utils/generate_walkable_cells.py#L1102)
+- [build_leaf_portals()](../utils/generate_walkable_cells.py#L1126)
 - `build_cell_routes(...)`
-- [attach_routes_to_cells()](/home/zmh/carla-social-force-model/utils/generate_walkable_cells.py#L1339)
+- [attach_routes_to_cells()](../utils/generate_walkable_cells.py#L1339)
 
 当前 crossing route 生成逻辑：
 
@@ -429,10 +430,10 @@ carla-social-force-model/
 ### 6.5 单 cell 路线可视化
 
 核心方法：
-- [render_cell_svg()](/home/zmh/carla-social-force-model/utils/render_walkable_cell_svg.py#L121)
+- [render_cell_svg()](../utils/render_walkable_cell_svg.py#L121)
 
 脚本：
-- [utils/render_walkable_cell_svg.py](/home/zmh/carla-social-force-model/utils/render_walkable_cell_svg.py)
+- [utils/render_walkable_cell_svg.py](../utils/render_walkable_cell_svg.py)
 
 当前图中语义：
 - `SW` = `SIDEWALK`
@@ -444,12 +445,12 @@ carla-social-force-model/
 ### 6.6 Scene-based 运行时选择
 
 核心方法：
-- [SceneCatalog.from_map_config()](/home/zmh/carla-social-force-model/scene_catalog.py#L29)
-- [SceneCatalog.get_scene()](/home/zmh/carla-social-force-model/scene_catalog.py#L50)
-- [SceneCatalog.get_routes()](/home/zmh/carla-social-force-model/scene_catalog.py#L62)
-- [PedSpawnManager._load_scene_catalog_if_needed()](/home/zmh/carla-social-force-model/pedestrian_spawner.py#L124)
-- [PedSpawnManager._spawn_point_uses_scene_route()](/home/zmh/carla-social-force-model/pedestrian_spawner.py#L139)
-- [PedSpawnManager._generate_scene_ped_spawners()](/home/zmh/carla-social-force-model/pedestrian_spawner.py#L188)
+- [SceneCatalog.from_map_config()](../simulation/scene_catalog.py#L29)
+- [SceneCatalog.get_scene()](../simulation/scene_catalog.py#L50)
+- [SceneCatalog.get_routes()](../simulation/scene_catalog.py#L62)
+- [PedSpawnManager._load_scene_catalog_if_needed()](../simulation/pedestrian_spawner.py#L124)
+- [PedSpawnManager._spawn_point_uses_scene_route()](../simulation/pedestrian_spawner.py#L139)
+- [PedSpawnManager._generate_scene_ped_spawners()](../simulation/pedestrian_spawner.py#L188)
 
 运行时行为：
 
@@ -473,7 +474,7 @@ carla-social-force-model/
 ```bash
 export PYTHONPATH=$PYTHONPATH:/home/zmh/carla/PythonAPI/carla
 conda run -n carla python utils/generate_walkable_cells.py \
-  --map-name Town03_Opt \
+  --map-name Town10HD_Opt \
   --timeout 240 \
   --approach-length 20 \
   --sidewalk-chunk-length 50 \
@@ -482,15 +483,15 @@ conda run -n carla python utils/generate_walkable_cells.py \
 ```
 
 默认输出：
-- `artifacts/Town03_Opt/topology/walkable_cells.json`
-- `artifacts/Town03_Opt/topology/walkable_cells.svg`
+- `topology/Town10HD_Opt/walkable_cells.json`
+- `topology/Town10HD_Opt/walkable_cells.svg`
 
 这个步骤的产出就是“场景目录源数据”。
 
 ### 7.2 第二步：查看整体划分结果
 
 直接查看：
-- [walkable_cells.svg](/home/zmh/carla-social-force-model/artifacts/Town03_Opt/topology/walkable_cells.svg)
+- [walkable_cells.svg](../topology/Town10HD_Opt/walkable_cells.svg)
 
 它用于确认：
 - 划分是否互斥
@@ -504,13 +505,13 @@ conda run -n carla python utils/generate_walkable_cells.py \
 ```bash
 export PYTHONPATH=$PYTHONPATH:/home/zmh/carla/PythonAPI/carla
 conda run -n carla python utils/render_walkable_cell_svg.py \
-  --map-name Town03_Opt \
+  --map-name Town10HD_Opt \
   --cell-id crossing_002 \
   --timeout 240
 ```
 
 默认输出：
-- `artifacts/Town03_Opt/topology/crossing_002_routes.svg`
+- `topology/Town10HD_Opt/crossing_002_routes.svg`
 
 这个步骤用于：
 - 检查某个 crossing / sidewalk 单元的 routes 是否合理
@@ -518,18 +519,18 @@ conda run -n carla python utils/render_walkable_cell_svg.py \
 
 ### 7.4 第四步：编写 scene-based scenario config
 
-当前示例配置在：
-- [scene_id_scenario_config.toml](/home/zmh/carla-social-force-model/config/scenarios/scene_id_scenario_config.toml)
+当前配置由 `tools/build_case.py` 生成到：
+- `data/<Town>/<NNN>/config/scenario.toml`
 
 示例结构：
 
 ```toml
 [map]
-map_name = 'Town03_Opt'
+map_name = 'Town10HD_Opt'
 map_path = 'Carla/Maps/'
 carla_timeout = 30.0
 scene_id = 'crossing_002'
-scene_catalog_path = 'artifacts/Town03_Opt/topology/walkable_cells.json'
+scene_catalog_path = 'topology/Town10HD_Opt/walkable_cells.json'
 
 [walker]
 pedestrian_seed = 2026
@@ -557,9 +558,9 @@ behavior = 'steady_walk'
 ### 7.5 第五步：运行仿真
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:/home/zmh/carla-social-force-model:/home/zmh/carla/PythonAPI/carla
+export PYTHONPATH=$PYTHONPATH:$PWD:${CARLA_ROOT}/PythonAPI/carla
 conda run -n carla python run_simulation.py \
-  --scenario-config config/scenarios/scene_id_scenario_config.toml
+  --scenario-config data/Town10HD_Opt/001/config/scenario.toml
 ```
 
 运行时行为：

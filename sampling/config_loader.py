@@ -6,55 +6,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib
 
-
-DEFAULT_SAMPLING_POLICY = {
-    'sequence_id': 'auto',
-    'output_root': 'artifacts/sequences',
-    'frame_stride': 10,
-    'valid_distance': 40.0,
-    'sensor_sync_timeout': 1.0,
-    'stop_on_ego_end': True,
-    'export': {
-        'ego_csv': True,
-        'labels_json': True,
-        'log_json': True,
-        'calibration_json': True,
-        'dynamic_actors': True,
-        'city_objects': True,
-        'simulation_records': True,
-        'pedestrian_bev': True,
-        'config_snapshots': True,
-    },
-    'annotation': {
-        'actor_filters': ['*pedestrian*', '*vehicle*'],
-        'city_object_labels': [
-            'TrafficLight',
-            'TrafficSigns',
-            'Poles',
-            'Static',
-            'Fences',
-            'Other',
-            'Dynamic',
-            'GuardRail',
-            'Car',
-            'Truck',
-            'Bus',
-            'Motorcycle',
-            'Bicycle',
-        ],
-    },
-}
-
-SUPPORTED_SENSOR_TYPES = {
-    'camera.rgb',
-    'camera.depth',
-    'camera.semantic_segmentation',
-    'lidar.ray_cast',
-    'lidar.ray_cast_semantic',
-    'radar',
-    'imu',
-    'gnss',
-}
+from sampling.defaults import DEFAULT_SAMPLING_POLICY, SUPPORTED_SENSOR_TYPES
 
 
 class SamplingConfigError(ValueError):
@@ -80,22 +32,25 @@ def _resolve_path(path_value, scenario_config_path):
         return None
 
     path = Path(path_value)
-    if path.is_absolute():
-        return path
+    repo_root = Path(__file__).resolve().parents[1]
+    repo_relative = repo_root / path
+    if repo_relative.exists():
+        return repo_relative
 
     scenario_path = Path(scenario_config_path).resolve()
-    scenario_relative = (scenario_path.parent / path).resolve()
+    scenario_relative = scenario_path.parent / path
     if scenario_relative.exists():
         return scenario_relative
 
-    workspace_relative = (Path.cwd() / path).resolve()
-    return workspace_relative
+    raise SamplingConfigError(
+        f'Sampling config path not found relative to the repository root or scenario config: {path_value}'
+    )
 
 
 def _validate_sensor_rig(sensor_rig):
     sensors = sensor_rig.get('sensor', [])
-    if not isinstance(sensors, list):
-        raise SamplingConfigError('sensor rig must define [[sensor]] entries.')
+    if not isinstance(sensors, list) or not sensors:
+        raise SamplingConfigError('sensor rig must define at least one [[sensor]] entry.')
 
     names = set()
     for index, sensor in enumerate(sensors):
@@ -114,6 +69,16 @@ def _validate_sensor_rig(sensor_rig):
         if sensor_name in names:
             raise SamplingConfigError(f'Duplicate sampling sensor name {sensor_name!r}.')
         names.add(sensor_name)
+
+        mount = str(sensor.get('mount', 'waist')).lower()
+        if mount not in {'waist', 'head'}:
+            raise SamplingConfigError(
+                f'sensor rig entry #{index} has unsupported mount {mount!r}. Supported mounts: head, waist.'
+            )
+        for field in ('location', 'rotation'):
+            value = sensor.get(field)
+            if value is not None and (not isinstance(value, list) or len(value) != 3):
+                raise SamplingConfigError(f'sensor rig entry #{index} field {field} must be a list of three numbers.')
 
 
 def load_sampling_setup(scenario_config, scenario_config_path):
@@ -145,11 +110,9 @@ def load_sampling_setup(scenario_config, scenario_config_path):
     _deep_update(resolved_policy, scenario_policy_override)
 
     return {
-        'enabled': True,
         'scenario_config_path': str(scenario_path),
         'sensor_rig_path': str(sensor_rig_path) if sensor_rig_path is not None else None,
         'policy_path': str(policy_path) if policy_path is not None else None,
         'sensor_rig': sensor_rig,
         'policy': resolved_policy,
-        'sampling_config': sampling_config,
     }

@@ -133,3 +133,5 @@ data/
 artifacts/
 logs/
 cache/
+analysis/
+docs/

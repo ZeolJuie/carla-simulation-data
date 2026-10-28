@@ -9,7 +9,6 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
 
 from case_builder.catalog import CatalogInventory
 from case_builder.compiler import (
@@ -77,7 +76,6 @@ class CaseBuilder:
             actors=actors,
             sampling_output_root=case_dir.parent,
             sequence_id=case_id,
-            sampling_policy_path=case_dir / "config" / "sampling_policy.toml",
         )
         validate_case_config(scenario_config, self.inventory)
 

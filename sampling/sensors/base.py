@@ -1,8 +1,6 @@
 import csv
-import json
 import math
 import queue
-from pathlib import Path
 
 import carla
 import numpy as np
@@ -86,6 +84,13 @@ class BaseSamplingSensor:
     def _spawn_sensor(self):
         raise NotImplementedError
 
+    def _spawn_sensor_actor(self, blueprint):
+        relative_transform = self.relative_transform()
+        if self.attach_to_parent:
+            return self.world.spawn_actor(blueprint, relative_transform, attach_to=self.parent_actor)
+        spawn_transform = world_transform_from_parent(self.parent_actor.get_transform(), relative_transform)
+        return self.world.spawn_actor(blueprint, spawn_transform)
+
     def _save_selected_frame(self, sensor_data):
         raise NotImplementedError
 
@@ -100,7 +105,10 @@ class BaseSamplingSensor:
 
     def wait_for_frame(self, frame_id, timeout=1.0):
         while True:
-            queued_frame, sensor_name = self.queue.get(timeout=timeout)
+            try:
+                queued_frame, _ = self.queue.get(timeout=timeout)
+            except queue.Empty:
+                return False
             if queued_frame < frame_id:
                 continue
             return queued_frame == frame_id
@@ -147,10 +155,7 @@ class CameraSensor(BaseSamplingSensor):
         set_blueprint_attr_if_supported(bp, 'image_size_y', int(self.sensor_spec.get('image_size_y', 900)))
         set_blueprint_attr_if_supported(bp, 'fov', float(self.sensor_spec.get('fov', 90.0)))
         set_blueprint_attr_if_supported(bp, 'sensor_tick', float(self.sensor_spec.get('sensor_tick', 0.05)))
-        relative_transform = self.relative_transform()
-        spawn_transform = relative_transform if self.attach_to_parent else world_transform_from_parent(self.parent_actor.get_transform(), relative_transform)
-        sensor = self.world.spawn_actor(bp, spawn_transform, attach_to=self.parent_actor if self.attach_to_parent else None)
-        return bp, sensor
+        return bp, self._spawn_sensor_actor(bp)
 
     def _save_selected_frame(self, sensor_data):
         file_path = self.output_dir / f'{sensor_data.frame:06d}.{self.file_extension}'
@@ -193,10 +198,7 @@ class LidarSensor(BaseSamplingSensor):
         set_blueprint_attr_if_supported(bp, 'rotation_frequency', float(self.sensor_spec.get('rotation_frequency', 20.0)))
         set_blueprint_attr_if_supported(bp, 'points_per_second', int(self.sensor_spec.get('points_per_second', 1000000)))
         set_blueprint_attr_if_supported(bp, 'sensor_tick', float(self.sensor_spec.get('sensor_tick', 0.05)))
-        relative_transform = self.relative_transform()
-        spawn_transform = relative_transform if self.attach_to_parent else world_transform_from_parent(self.parent_actor.get_transform(), relative_transform)
-        sensor = self.world.spawn_actor(bp, spawn_transform, attach_to=self.parent_actor if self.attach_to_parent else None)
-        return bp, sensor
+        return bp, self._spawn_sensor_actor(bp)
 
     def _save_selected_frame(self, sensor_data):
         data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=np.dtype('f4')))
@@ -236,10 +238,7 @@ class RadarSensor(BaseSamplingSensor):
         set_blueprint_attr_if_supported(bp, 'points_per_second', int(self.sensor_spec.get('points_per_second', 15000)))
         set_blueprint_attr_if_supported(bp, 'range', float(self.sensor_spec.get('range', 30.0)))
         set_blueprint_attr_if_supported(bp, 'sensor_tick', float(self.sensor_spec.get('sensor_tick', 0.05)))
-        relative_transform = self.relative_transform()
-        spawn_transform = relative_transform if self.attach_to_parent else world_transform_from_parent(self.parent_actor.get_transform(), relative_transform)
-        sensor = self.world.spawn_actor(bp, spawn_transform, attach_to=self.parent_actor if self.attach_to_parent else None)
-        return bp, sensor
+        return bp, self._spawn_sensor_actor(bp)
 
     def _save_selected_frame(self, sensor_data):
         data = np.frombuffer(sensor_data.raw_data, dtype=np.dtype('f4'))
@@ -286,10 +285,7 @@ class IMUSensor(CsvStreamSensor):
         set_blueprint_attr_if_supported(bp, 'noise_gyro_stddev_y', float(self.sensor_spec.get('noise_gyro_stddev_y', 0.001)))
         set_blueprint_attr_if_supported(bp, 'noise_gyro_stddev_z', float(self.sensor_spec.get('noise_gyro_stddev_z', 0.001)))
         set_blueprint_attr_if_supported(bp, 'sensor_tick', float(self.sensor_spec.get('sensor_tick', 0.05)))
-        relative_transform = self.relative_transform()
-        spawn_transform = relative_transform if self.attach_to_parent else world_transform_from_parent(self.parent_actor.get_transform(), relative_transform)
-        sensor = self.world.spawn_actor(bp, spawn_transform, attach_to=self.parent_actor if self.attach_to_parent else None)
-        return bp, sensor
+        return bp, self._spawn_sensor_actor(bp)
 
     def _save_selected_frame(self, sensor_data):
         self._append_row([
@@ -317,10 +313,7 @@ class GNSSSensor(CsvStreamSensor):
         set_blueprint_attr_if_supported(bp, 'noise_lat_stddev', float(self.sensor_spec.get('noise_lat_stddev', 0.000001)))
         set_blueprint_attr_if_supported(bp, 'noise_lon_stddev', float(self.sensor_spec.get('noise_lon_stddev', 0.000001)))
         set_blueprint_attr_if_supported(bp, 'sensor_tick', float(self.sensor_spec.get('sensor_tick', 0.05)))
-        relative_transform = self.relative_transform()
-        spawn_transform = relative_transform if self.attach_to_parent else world_transform_from_parent(self.parent_actor.get_transform(), relative_transform)
-        sensor = self.world.spawn_actor(bp, spawn_transform, attach_to=self.parent_actor if self.attach_to_parent else None)
-        return bp, sensor
+        return bp, self._spawn_sensor_actor(bp)
 
     def _save_selected_frame(self, sensor_data):
         transform = sensor_data.transform

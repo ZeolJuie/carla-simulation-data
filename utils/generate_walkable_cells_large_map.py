@@ -4,6 +4,7 @@ import hashlib
 import heapq
 import json
 import math
+import os
 import random
 import statistics
 import subprocess
@@ -20,8 +21,8 @@ import numpy as np
 from shapely.geometry import GeometryCollection, LineString, Point, Polygon
 from shapely.ops import unary_union
 
-from obstacles import extract_sidewalk_borders
-from path_planner import EdgeType, PedPathPlanner
+from simulation.obstacles import extract_sidewalk_borders
+from simulation.path_planner import EdgeType, PedPathPlanner
 
 
 ROUTE_TYPE_DEFINITIONS = {
@@ -198,7 +199,9 @@ STATIC_OBSTACLE_ENDPOINT_ANCHOR_RADIUS_M = 0.18
 ROUTE_SPAWN_Z_OFFSET_M = 0.2
 DEFAULT_TILE_CATALOG_PATH = Path("tmp") / "town12_sidewalk_tiles" / "tile_catalog.json"
 DEFAULT_TOPOLOGY_ROOT = Path("topology")
-DEFAULT_CARLA_MAPS_ROOT = Path("/home/zhoumohan/carla/CARLA_0.9.15/CarlaUE4/Content/Carla/Maps")
+DEFAULT_CARLA_MAPS_ROOT = Path(
+    os.environ.get("CARLA_MAPS_ROOT", "Carla/Maps")
+)
 
 Bounds = Tuple[float, float, float, float]
 Cell = Tuple[int, int]

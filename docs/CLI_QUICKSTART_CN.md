@@ -147,7 +147,6 @@ conda run -n carla python tools/run_scenario_batch.py \
   --output-root data \
   --target-count 20 \
   --catalog topology/Town10HD_Opt/walkable_cells.json \
-  --catalog topology/Town05_Opt/walkable_cells.json \
   --planner llm \
   --model qwen-plus \
   --base-url https://dashscope.aliyuncs.com/compatible-mode/v1 \
@@ -195,8 +194,7 @@ conda run -n carla python tools/run_scenario_batch.py \
   示例：
 
   ```bash
-  --catalog topology/Town10HD_Opt/walkable_cells.json \
-  --catalog topology/Town05_Opt/walkable_cells.json
+  --catalog topology/Town10HD_Opt/walkable_cells.json
   ```
 
 #### 规划与生成参数

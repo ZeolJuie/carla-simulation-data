@@ -5,12 +5,11 @@ from collections import Counter
 from pathlib import Path
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utils.postprocess_dataset.common import load_json, sequence_dirs_from_root, write_json
+from utils.dataset_common import iter_sequence_dirs, load_json, write_json
 
 
 DEFAULT_START_ID = 10000
@@ -39,14 +38,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def iter_sequence_dirs(input_path):
-    path = Path(input_path)
-    if (path / "sampling" / "labels.json").exists():
-        return [path]
-    return sequence_dirs_from_root(path)
-
-
-def repair_sequence(sequence_dir, start_id, keep_small_poles):
+def repair_sequence(sequence_dir, start_id, keep_small_poles, valid_only=False):
     label_path = Path(sequence_dir) / "sampling" / "labels.json"
     labels = load_json(label_path)
 
@@ -59,6 +51,9 @@ def repair_sequence(sequence_dir, start_id, keep_small_poles):
     for frame in labels:
         existing_ids = [int(obj["object_id"]) for obj in frame["objects"] if int(obj["object_id"]) >= 0]
         assigned_ids.update(existing_ids)
+
+        if valid_only and not frame.get("frame_valid", True):
+            continue
 
         filtered_objects = []
         for obj in frame["objects"]:
@@ -87,6 +82,17 @@ def repair_sequence(sequence_dir, start_id, keep_small_poles):
                 obj["object_id"] = next_id
                 next_id += 1
             changed_count += 1
+
+        seen_frame_ids = set()
+        deduplicated_objects = []
+        for obj in frame["objects"]:
+            object_id = int(obj["object_id"])
+            if object_id in seen_frame_ids:
+                removed_counter["duplicate_object_id"] += 1
+                continue
+            seen_frame_ids.add(object_id)
+            deduplicated_objects.append(obj)
+        frame["objects"] = deduplicated_objects
 
     write_json(label_path, labels)
 
